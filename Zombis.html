@@ -1,0 +1,2236 @@
+<!doctype html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="zombis-version" content="1">
+<meta name="theme-color" content="#1f2a1c">
+<title>Zombis</title>
+<style>
+  :root { --fondo: #141a13; --tinta: #e9efe4; --suave: #9fb09a; --boton: #22301f; --borde: #4f6b45; --verde: #7fc96b; --rojo: #e0533d; --oro: #e2b33a; }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; min-height: 100%; }
+  body { background: radial-gradient(circle at 50% 0%, #26341f, var(--fondo) 70%); color: var(--tinta); font: 17px/1.45 system-ui, "Segoe UI", Roboto, sans-serif; }
+  main { max-width: 760px; margin: 0 auto; padding: 16px; min-height: 100vh; display: flex; flex-direction: column; }
+  h1 { font-size: 2.8rem; margin: 18px 0 2px; text-align: center; letter-spacing: .04em; }
+  h1 span { color: var(--rojo); }
+  .sub { text-align: center; color: var(--suave); margin: 0 0 22px; }
+  .menu { display: grid; gap: 12px; max-width: 420px; width: 100%; margin: 0 auto; }
+  button { font: inherit; font-weight: 600; padding: 14px 18px; border-radius: 12px; cursor: pointer; background: var(--boton); color: var(--tinta); border: 2px solid var(--borde); }
+  button.principal { background: #3c6b2f; border-color: #6da95a; }
+  button:focus-visible { outline: 3px solid var(--oro); outline-offset: 3px; }
+  .version { text-align: center; color: var(--suave); font-size: .85rem; margin-top: auto; padding-top: 24px; }
+  #zonaJuego { outline: none; display: grid; gap: 10px; }
+  #hud { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 8px; }
+  .dato { background: #1b2418; border: 2px solid var(--borde); border-radius: 12px; padding: 8px 12px; }
+  .dato small { display: block; color: var(--suave); font-size: .8rem; }
+  .dato b { font-size: 1.2rem; }
+  #textoVisible { min-height: 3em; text-align: center; font-weight: 600; margin: 8px 0; }
+  .panel { position: fixed; inset: 0; display: grid; place-items: center; background: rgba(0,0,0,.6); padding: 16px; z-index: 5; }
+  .caja { background: #1b2418; border: 3px solid var(--borde); border-radius: 18px; padding: 22px; max-width: 460px; width: 100%; display: grid; gap: 12px; text-align: center; max-height: 92vh; overflow: auto; }
+  .caja h2 { margin: 0; font-size: 1.7rem; }
+  #ayuda .caja { text-align: left; max-width: 620px; }
+  #ayuda h3 { margin: 8px 0 0; }
+  #ayuda ul { margin: 4px 0; padding-left: 22px; }
+  .sonidos { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; }
+  .sonidos button { padding: 9px 10px; font-size: .95rem; }
+  .campo { display: grid; gap: 4px; text-align: left; font-weight: 600; }
+  .campo input, .campo select { font: inherit; padding: 10px 12px; border-radius: 10px; border: 2px solid var(--borde); background: #10160f; color: var(--tinta); }
+  .check { display: flex; gap: 10px; align-items: center; text-align: left; font-weight: 600; }
+  .check input { width: 22px; height: 22px; }
+  ol.tabla { text-align: left; margin: 0; padding-left: 26px; }
+  .oculto { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+  [hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<main role="application" aria-label="Zombis">
+  <div id="aviso1" class="oculto" aria-live="assertive" aria-atomic="true"></div>
+  <div id="aviso2" class="oculto" aria-live="assertive" aria-atomic="true"></div>
+
+  <section id="inicio">
+    <h1>Zom<span>bis</span></h1>
+    <p class="sub">Sobreviví a las rondas de zombis usando el oído.</p>
+    <div class="menu">
+      <button id="bJugar" class="principal">Jugar</button>
+      <button id="bPractica">Práctica (sin daño)</button>
+      <button id="bAyuda">Cómo se juega</button>
+      <button id="bTabla">Tabla de puntos</button>
+      <button id="bOpciones">Opciones</button>
+    </div>
+    <p id="cuentaInfo" class="sub"></p>
+    <p id="cargando" class="sub" role="status"></p>
+    <p class="version">Versión 1.0</p>
+  </section>
+
+  <section id="mapas" hidden>
+    <h2 style="text-align:center">Elegí el mapa</h2>
+    <div class="menu">
+      <button data-mapa="aleatorio" class="principal">Aleatorio</button>
+      <button data-mapa="bosque">Bosque</button>
+      <button data-mapa="selva">Selva</button>
+      <button data-mapa="jungla">Jungla</button>
+      <button data-mapa="desierto">Desierto</button>
+      <button data-mapa="casa">Casa grande</button>
+      <button id="bVolverMapas">Volver</button>
+    </div>
+  </section>
+
+  <section id="juego" hidden>
+    <div id="zonaJuego" tabindex="-1" aria-label="Partida. Escape para pausa.">
+      <div id="hud" aria-hidden="true">
+        <div class="dato"><small>Vida</small><b id="hVida">100</b></div>
+        <div class="dato"><small>Arma</small><b id="hArma">-</b></div>
+        <div class="dato"><small>Apuntás a</small><b id="hZona">Pecho</b></div>
+        <div class="dato"><small>Ronda</small><b id="hRonda">-</b></div>
+        <div class="dato"><small>Puntos</small><b id="hPuntos">0</b></div>
+        <div class="dato"><small>Plata</small><b id="hPlata">0</b></div>
+      </div>
+      <p id="textoVisible" aria-hidden="true"></p>
+    </div>
+  </section>
+
+  <div id="pausa" class="panel" hidden>
+    <div class="caja" role="dialog" aria-labelledby="tPausa">
+      <h2 id="tPausa" tabindex="-1">Pausa</h2>
+      <button id="bSeguir" class="principal">Seguir jugando</button>
+      <button id="bAyudaPausa">Cómo se juega</button>
+      <button id="bSalir">Salir al menú</button>
+    </div>
+  </div>
+
+  <div id="fin" class="panel" hidden>
+    <div class="caja" role="dialog" aria-labelledby="tFin">
+      <h2 id="tFin" tabindex="-1">Fin de la partida</h2>
+      <p id="resumen"></p>
+      <p id="guardado" role="status"></p>
+      <button id="bOtra">Jugar otra vez</button>
+      <button id="bMenu">Menú</button>
+    </div>
+  </div>
+
+  <div id="cuentaPanel" class="panel" hidden>
+    <div class="caja" role="dialog" aria-labelledby="tCuenta">
+      <h2 id="tCuenta" tabindex="-1">Crear tu cuenta</h2>
+      <p>Para jugar necesitás una cuenta. Con ella se guardan tus puntajes en la tabla. En este dispositivo se puede crear una sola cuenta.</p>
+      <label class="campo">Tu nombre de jugador
+        <input id="cNombre" maxlength="20" autocomplete="off">
+      </label>
+      <button id="bCrearCuenta" class="principal">Crear cuenta</button>
+      <p id="cEstado" role="alert"></p>
+      <button id="bCancelarCuenta">Volver</button>
+    </div>
+  </div>
+
+  <div id="tabla" class="panel" hidden>
+    <div class="caja" role="dialog" aria-labelledby="tTabla">
+      <h2 id="tTabla" tabindex="-1">Tabla de puntos</h2>
+      <ol id="listaTabla" class="tabla"></ol>
+      <button id="bCerrarTabla">Cerrar</button>
+    </div>
+  </div>
+
+  <div id="opciones" class="panel" hidden>
+    <div class="caja" role="dialog" aria-labelledby="tOp">
+      <h2 id="tOp" tabindex="-1">Opciones</h2>
+      <label class="campo">Volumen general
+        <input id="oVol" type="range" min="0" max="100" step="5">
+      </label>
+      <label class="campo">Volumen del ambiente
+        <input id="oAmb" type="range" min="0" max="100" step="5">
+      </label>
+      <label class="check"><input id="oRadar" type="checkbox"> Radar de paredes, puertas y árboles</label>
+      <label class="check"><input id="oVoz" type="checkbox"> Usar la voz del juego (si no usás lector de pantalla)</label>
+      <button id="bCerrarOp" class="principal">Listo</button>
+    </div>
+  </div>
+
+  <div id="ayuda" class="panel" hidden>
+    <div class="caja" role="dialog" aria-labelledby="tAyuda">
+      <h2 id="tAyuda" tabindex="-1">Cómo se juega</h2>
+      <p>Al empezar tenés 60 segundos sin zombis para juntar cosas. Después vienen las rondas, cada una más difícil. Entre ronda y ronda hay un descanso de 45 segundos. Se juega con auriculares. Lo que está atrás tuyo suena más bajo y tapado, como en la realidad. Para jugar necesitás una cuenta (una sola por dispositivo): tus puntajes se guardan solos en la tabla al terminar.</p>
+      <h3>Moverse</h3>
+      <ul>
+        <li>W y S: caminar adelante y atrás. Con Shift corrés.</li>
+        <li>A y D: moverse de costado en línea recta, sin girar.</li>
+        <li>Flecha izquierda y derecha: girar la mira, y con ella hacia dónde caminás. Cada vez que girás un octavo de vuelta suena un tic, y al mirar al norte suena un tic más agudo.</li>
+        <li>Flecha arriba y abajo: elegir a qué parte del zombi apuntás: cabeza, pecho o piernas. Funciona igual en el suelo y arriba de un árbol (desde el árbol la altura se acomoda sola).</li>
+        <li>Las cosas se agarran solas al pisarlas. Si agarrás un arma que ya tenés, queda de repuesto: cuando se rompe la que usás, sacás la de repuesto sola. Lo mismo con las armas blancas.</li>
+        <li>E: subir a un árbol o bajar. En la casa, parado al lado de una puerta (no adentro de ella): trabarla con una barricada. Los zombis la golpean hasta romperla y te avisa cuando está al 50 y al 25 por ciento. E otra vez: arreglarla, o sacarla si está entera.</li>
+      </ul>
+      <h3>Pelear</h3>
+      <ul>
+        <li>Espacio: disparar. La ametralladora dispara mientras lo mantenés.</li>
+        <li>Cuando un zombi está en la mira suena el sonido de mira de Swamp: agudo si apuntás a la cabeza, medio al pecho y grave a las piernas. Si hay dos zombis en la mira suenan varios pings, y si hay tres o más, una ráfaga de pings.</li>
+        <li>Cabeza: pega el doble y da más puntos, pero hay que apuntar más justo. Pecho: normal. Piernas: pega menos, es más fácil de acertar y el zombi camina más lento un rato.</li>
+        <li>R: recargar. Armas de fuego: 1 pistola, 2 revólver, 3 escopeta, 4 escopeta doble, 5 subfusil, 6 fusil de asalto, 7 ametralladora, 8 rifle, 9 francotirador (atraviesa hasta 3 zombis), 0 lanzagranadas (explota donde pega), y la tecla de la derecha del 0: ballesta. Coma y punto: arma anterior y siguiente de las que tenés.</li>
+        <li>La tecla de la izquierda del 1 (la del |): tirar una granada hacia donde mirás. Explota a los dos segundos; no te quedes cerca.</li>
+        <li>F: golpear con el arma blanca (cuchillo, machete, hacha, martillo, palo de golf, bate, espada o motosierra). Si un zombi te agarra, suena una alarma y tenés un momento para apretar F y sacártelo. Sin arma blanca, la F empuja con las manos. Shift y F: cambiar a otra arma blanca de repuesto.</li>
+        <li>Q: usar un botiquín.</li>
+      </ul>
+      <h3>Información</h3>
+      <ul>
+        <li>H: vida y botiquines. B: armas y balas. N: ronda, zombis que faltan, puntos, plata y misiones.</li>
+        <li>Z: radar de zombis. M: hacia dónde mirás.</li>
+        <li>C: guía hacia la cosa más cercana (balas, armas, botiquines). Te dice qué es y a cuántos metros, y un bip te lleva hasta ahí; al llegar se agarra sola. C otra vez: la siguiente cosa.</li>
+        <li>X: guía hacia la puerta más cercana (en la casa) o el árbol más cercano (afuera). Suena un bip que te marca por dónde ir, aunque la puerta esté en otra habitación: seguilo y cuando el bip se pone más agudo estás de frente. Cuando ya ves la puerta, también suena la puerta. Apretando X otra vez te lleva a otra puerta o árbol. G te gira para mirar hacia la guía. Borrar cancela la guía.</li>
+        <li>V: te gira hacia el zombi más peligroso (por ejemplo el gritón, un corredor que viene rápido o el que te tiene agarrado) y te dice cuál es y a cuántos metros.</li>
+        <li>P: tienda. Si estás lejos, te guía hasta ella (suena una música en su lugar, y la G te gira hacia ahí). Si estás al lado, la abre. Solo abre en el descanso y antes de la primera ronda. Se paga con plata, que ganás igual que los puntos, pero gastarla no te baja los puntos de la tabla. Adentro: flechas arriba y abajo para elegir, izquierda y derecha para cambiar de sección, Enter para comprar, P o Escape para salir.</li>
+        <li>T: prender o apagar el radar de paredes, puertas y árboles. Escape: pausa.</li>
+      </ul>
+      <h3>Misiones</h3>
+      <p>Cada ronda tiene una misión básica (por ejemplo, matar zombis con tiros a la cabeza) que da plata. Cada tantas rondas, al azar, aparece una misión difícil: mientras dure, los puntos y la plata valen el doble, y si la cumplís ganás un premio grande.</p>
+      <h3>Cajas de suministros</h3>
+      <p>Desde la ronda 2, cada tanto cae una caja con balas, botiquín, granada y a veces un arma. Se escucha caer y suena en el piso; con C te guía hasta ella.</p>
+      <h3>Práctica</h3>
+      <p>Desde el menú, "Práctica": los zombis son más lentos y no te lastiman. No se guarda en la tabla.</p>
+      <h3>Armas</h3>
+      <p>Ninguna arma tiene balas infinitas, y todas se gastan con el uso. Una voz te avisa cuando están al 20 y al 5 por ciento, para que busques otra. Algunas armas comparten balas: la pistola y el subfusil usan 9 milímetros, las dos escopetas usan cartuchos, y la ametralladora y el rifle usan las mismas balas. Podés llevar todas las armas que quieras de repuesto, de fuego y blancas. La tecla B te dice cuántas tenés.</p>
+      <h3>Zombis</h3>
+      <p>Común: lento. Corredor: rápido, respira agitado. Gordo: aguanta mucho y pega fuerte. Gritón: llama a otros zombis, matalo primero. Trepador: es el único que sube a los árboles. Jefe: aparece cada 5 rondas.</p>
+      <h3>Probar sonidos</h3>
+      <div class="sonidos" id="pruebas"></div>
+      <button id="bCerrarAyuda" class="principal">Cerrar</button>
+    </div>
+  </div>
+</main>
+
+<script src="sonidos.js"></script>
+<script>
+'use strict';
+(() => {
+  const $ = s => document.querySelector(s);
+  const TAU = Math.PI * 2;
+  const rnd = (a, b) => a + Math.random() * (b - a);
+  const rndi = (a, b) => Math.floor(rnd(a, b + 1));
+  const elegir = a => a[Math.floor(Math.random() * a.length)];
+  const clamp = (v, a, b) => Math.max(a, Math.min(b, v));
+  const normAng = a => { a %= TAU; if (a > Math.PI) a -= TAU; if (a <= -Math.PI) a += TAU; return a; };
+  const grados = r => r * 180 / Math.PI;
+  const fx = (t, d) => { try { if (window.GRAF) window.GRAF.evento(t, d); } catch (e) {} try { window.dispatchEvent(new CustomEvent('zombis', { detail: { t, d } })); } catch (e) {} };
+
+  // ================= Opciones =================
+  const OP = { volumen: 0.8, ambiente: 0.5, radar: true, vozJuego: false, nombre: '' };
+  try { Object.assign(OP, JSON.parse(localStorage.getItem('zombis-opciones') || '{}')); } catch (e) {}
+  function guardarOp() { try { localStorage.setItem('zombis-opciones', JSON.stringify(OP)); } catch (e) {} }
+
+  // ================= Voz =================
+  // En la app de Android, la voz es la del sistema (la que el usuario elige en Android, por ejemplo Eloquence)
+  if (window.ZAndroid) window.ZHABLAR = (t, v) => window.ZAndroid.hablar(String(t), +v || 1.25);
+  let alterno = false;
+  function anunciar(t) {
+    const a = $('#aviso1'), b = $('#aviso2');
+    const usar = alterno ? b : a, otro = alterno ? a : b;
+    alterno = !alterno;
+    otro.textContent = '';
+    usar.textContent = t;
+    $('#textoVisible').textContent = t;
+    if (OP.vozJuego) {
+      // en la app del celular, la voz la pone el sistema (la que el usuario eligió, por ejemplo Eloquence)
+      if (typeof window.ZHABLAR === 'function') { try { window.ZHABLAR(t, OP.velVoz || 1.25); return; } catch (e) {} }
+      if ('speechSynthesis' in window) try {
+        speechSynthesis.cancel();
+        const u = new SpeechSynthesisUtterance(t);
+        u.lang = 'es-AR'; u.rate = OP.velVoz || 1.25;
+        const voces = speechSynthesis.getVoices();
+        const v = (OP.voz && voces.find(v => v.voiceURI === OP.voz)) || voces.find(v => /^es/i.test(v.lang));
+        if (v) { u.voice = v; u.lang = v.lang; }
+        speechSynthesis.speak(u);
+      } catch (e) {}
+    }
+  }
+
+  // ================= Audio =================
+  let ctx = null, master = null, ambBus = null, ruidoBuf = null;
+  function iniciarAudio() {
+    if (ctx) { if (ctx.state === 'suspended') ctx.resume(); return; }
+    ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const comp = ctx.createDynamicsCompressor();
+    comp.threshold.value = -10; comp.ratio.value = 6;
+    master = ctx.createGain(); master.gain.value = OP.volumen;
+    master.connect(comp); comp.connect(ctx.destination);
+    ambBus = ctx.createGain(); ambBus.gain.value = OP.ambiente * 0.6; ambBus.connect(master);
+    ruidoBuf = crearRuido(ctx);
+  }
+  function crearRuido(c) {
+    const b = c.createBuffer(1, c.sampleRate * 2, c.sampleRate);
+    const d = b.getChannelData(0);
+    for (let i = 0; i < d.length; i++) d[i] = Math.random() * 2 - 1;
+    return b;
+  }
+  function env(g, t, a, pico, dur, rel) {
+    g.gain.setValueAtTime(0.0001, t);
+    g.gain.linearRampToValueAtTime(pico, t + a);
+    g.gain.setValueAtTime(pico, t + a + dur);
+    g.gain.exponentialRampToValueAtTime(0.0001, t + a + dur + rel);
+  }
+  function osc(dest, t, { tipo = 'sine', f = 440, f2 = null, dur = 0.1, vol = 0.3, a = 0.004, rel = 0.05 } = {}) {
+    const o = ctx.createOscillator(); o.type = tipo;
+    o.frequency.setValueAtTime(f, t);
+    if (f2) o.frequency.exponentialRampToValueAtTime(f2, t + a + dur + rel);
+    const g = ctx.createGain(); env(g, t, a, vol, dur, rel);
+    o.connect(g); g.connect(dest);
+    o.start(t); o.stop(t + a + dur + rel + 0.05);
+  }
+  function ruido(dest, t, { dur = 0.1, vol = 0.3, a = 0.003, rel = 0.05, tipo = 'bandpass', f = 1000, f2 = null, q = 1 } = {}) {
+    const s = ctx.createBufferSource(); s.buffer = ruidoBuf; s.loop = true;
+    const fl = ctx.createBiquadFilter(); fl.type = tipo; fl.Q.value = q;
+    fl.frequency.setValueAtTime(f, t);
+    if (f2) fl.frequency.exponentialRampToValueAtTime(f2, t + a + dur + rel);
+    const g = ctx.createGain(); env(g, t, a, vol, dur, rel);
+    s.connect(fl); fl.connect(g); g.connect(dest);
+    s.start(t, Math.random() * 1.5); s.stop(t + a + dur + rel + 0.05);
+  }
+  function gruñido(dest, t, { f0 = 90, b1 = 450, b2 = 1000, dur = 1, vol = 0.5, wob = 8, glide = 0.8, rv = 0.25 } = {}) {
+    const o = ctx.createOscillator(); o.type = 'sawtooth';
+    const fi = f0 * rnd(0.9, 1.12);
+    o.frequency.setValueAtTime(fi, t);
+    o.frequency.linearRampToValueAtTime(fi * glide, t + dur);
+    const lfo = ctx.createOscillator(); lfo.frequency.value = wob * rnd(0.8, 1.25);
+    const lg = ctx.createGain(); lg.gain.value = fi * 0.18;
+    lfo.connect(lg); lg.connect(o.frequency);
+    const mix = ctx.createGain();
+    o.connect(mix);
+    const s = ctx.createBufferSource(); s.buffer = ruidoBuf; s.loop = true;
+    const ng = ctx.createGain(); ng.gain.value = rv; s.connect(ng); ng.connect(mix);
+    const f1 = ctx.createBiquadFilter(); f1.type = 'bandpass'; f1.frequency.value = b1 * rnd(0.9, 1.1); f1.Q.value = 3;
+    const f2 = ctx.createBiquadFilter(); f2.type = 'bandpass'; f2.frequency.value = b2 * rnd(0.9, 1.1); f2.Q.value = 5;
+    const g = ctx.createGain(); env(g, t, 0.07, vol * 2.2, dur * 0.65, dur * 0.35);
+    mix.connect(f1); mix.connect(f2); f1.connect(g); f2.connect(g); g.connect(dest);
+    const fin = t + dur + 0.2;
+    o.start(t); lfo.start(t); s.start(t, Math.random()); o.stop(fin); lfo.stop(fin); s.stop(fin);
+  }
+
+  // Catálogo de sonidos: cada uno recibe (destino, tiempo)
+  const S = {
+    paso: {
+      pasto: (d, t) => ruido(d, t, { dur: .05, vol: .35, f: 1400, q: .8, rel: .06 }),
+      tierra: (d, t) => ruido(d, t, { dur: .04, vol: .5, tipo: 'lowpass', f: 600, rel: .06 }),
+      hojas: (d, t) => { ruido(d, t, { dur: .04, vol: .3, f: 3200, q: 1.2, rel: .05 }); ruido(d, t + .035, { dur: .03, vol: .22, f: 2200, rel: .04 }); },
+      agua: (d, t) => { ruido(d, t, { dur: .12, vol: .35, f: 900, f2: 2600, q: 2, rel: .12 }); osc(d, t + .02, { f: 500, f2: 1300, dur: .05, vol: .06 }); },
+      arena: (d, t) => ruido(d, t, { dur: .1, vol: .32, tipo: 'lowpass', f: 1000, q: .5, rel: .08 }),
+      madera: (d, t) => { osc(d, t, { f: 150, f2: 90, dur: .03, vol: .45, rel: .06 }); ruido(d, t, { dur: .02, vol: .18, f: 2500, rel: .03 }); },
+      baldosa: (d, t) => { ruido(d, t, { dur: .015, vol: .35, tipo: 'highpass', f: 3000, rel: .03 }); osc(d, t, { f: 950, dur: .01, vol: .05, rel: .04 }); }
+    },
+    pistola: (d, t) => { ruido(d, t, { dur: .03, vol: 1, tipo: 'highpass', f: 1200, rel: .12 }); osc(d, t, { f: 160, f2: 45, dur: .04, vol: .9, rel: .15 }); ruido(d, t + .02, { dur: .1, vol: .22, tipo: 'lowpass', f: 1500, rel: .35 }); },
+    escopeta: (d, t) => { ruido(d, t, { dur: .08, vol: 1.1, tipo: 'lowpass', f: 3000, rel: .45 }); osc(d, t, { f: 95, f2: 30, dur: .1, vol: 1, rel: .3 }); ruido(d, t + .5, { dur: .02, vol: .35, f: 2200, q: 3, rel: .03 }); ruido(d, t + .65, { dur: .02, vol: .4, f: 1600, q: 3, rel: .04 }); },
+    ametralladora: (d, t) => { ruido(d, t, { dur: .02, vol: .8, tipo: 'highpass', f: 1500, rel: .06 }); osc(d, t, { f: 190, f2: 60, dur: .02, vol: .6, rel: .07 }); },
+    rifle: (d, t) => { ruido(d, t, { dur: .012, vol: 1, tipo: 'highpass', f: 2500, rel: .05 }); osc(d, t, { f: 110, f2: 35, dur: .08, vol: 1, rel: .45 }); ruido(d, t + .03, { dur: .3, vol: .28, tipo: 'lowpass', f: 900, rel: 1 }); ruido(d, t + .8, { dur: .015, vol: .3, f: 2500, q: 3, rel: .03 }); ruido(d, t + .95, { dur: .015, vol: .35, f: 1800, q: 3, rel: .03 }); },
+    vacio: (d, t) => ruido(d, t, { dur: .008, vol: .5, f: 3200, q: 4, rel: .02 }),
+    recargaIni: (d, t) => { ruido(d, t, { dur: .015, vol: .4, f: 1800, q: 3, rel: .03 }); ruido(d, t + .12, { dur: .03, vol: .25, f: 900, q: 2, rel: .05 }); },
+    recargaFin: (d, t) => { ruido(d, t, { dur: .015, vol: .45, f: 2600, q: 3, rel: .03 }); ruido(d, t + .1, { dur: .02, vol: .5, f: 1500, q: 3, rel: .04 }); },
+    cambio: (d, t) => { ruido(d, t, { dur: .02, vol: .3, f: 1500, q: 2, rel: .03 }); ruido(d, t + .09, { dur: .02, vol: .3, f: 2600, q: 2, rel: .03 }); },
+    mira: (d, t) => osc(d, t, { f: 1250, dur: .03, vol: .22, rel: .02 }),
+    miraCabeza: (d, t) => osc(d, t, { f: 1750, dur: .03, vol: .24, rel: .02 }),
+    miraPiernas: (d, t) => osc(d, t, { f: 820, dur: .035, vol: .26, rel: .02 }),
+    zona: [(d, t) => { osc(d, t, { tipo: 'triangle', f: 1400, dur: .02, vol: .15, rel: .03 }); osc(d, t + .06, { tipo: 'triangle', f: 1750, dur: .02, vol: .15, rel: .03 }); },
+           (d, t) => osc(d, t, { tipo: 'triangle', f: 1250, dur: .03, vol: .15, rel: .03 }),
+           (d, t) => { osc(d, t, { tipo: 'triangle', f: 1000, dur: .02, vol: .17, rel: .03 }); osc(d, t + .06, { tipo: 'triangle', f: 820, dur: .02, vol: .17, rel: .03 }); }],
+    brujula: (d, t) => osc(d, t, { f: 1500, dur: .008, vol: .05, rel: .03 }),
+    brujulaNorte: (d, t) => { osc(d, t, { f: 2300, dur: .01, vol: .08, rel: .04 }); osc(d, t + .06, { f: 2300, dur: .01, vol: .06, rel: .04 }); },
+    swing: (d, t) => ruido(d, t, { dur: .1, vol: .35, f: 600, f2: 2600, q: 1.5, rel: .05 }),
+    golpe: {
+      puños: (d, t) => { ruido(d, t, { dur: .03, vol: .6, tipo: 'lowpass', f: 600, rel: .06 }); osc(d, t, { f: 100, f2: 60, dur: .02, vol: .4, rel: .06 }); },
+      cuchillo: (d, t) => { ruido(d, t, { dur: .04, vol: .45, tipo: 'highpass', f: 4000, rel: .05 }); ruido(d, t + .01, { dur: .03, vol: .5, f: 900, rel: .05 }); },
+      machete: (d, t) => { ruido(d, t, { dur: .05, vol: .65, f: 1200, rel: .06 }); ruido(d, t, { dur: .03, vol: .3, tipo: 'highpass', f: 5000, rel: .05 }); },
+      hacha: (d, t) => { osc(d, t, { f: 120, f2: 55, dur: .06, vol: .8, rel: .1 }); ruido(d, t, { dur: .08, vol: .7, f: 700, rel: .08 }); },
+      martillo: (d, t) => { osc(d, t, { f: 90, f2: 50, dur: .04, vol: .9, rel: .1 }); osc(d, t, { f: 620, dur: .01, vol: .12, rel: .2 }); },
+      golf: (d, t) => { osc(d, t, { f: 1900, dur: .008, vol: .3, rel: .15 }); ruido(d, t, { dur: .03, vol: .4, tipo: 'lowpass', f: 700, rel: .05 }); },
+      bate: (d, t) => { osc(d, t, { f: 320, f2: 200, dur: .02, vol: .6, rel: .08 }); ruido(d, t, { dur: .02, vol: .4, f: 1200, rel: .04 }); }
+    },
+    rotura: (d, t) => { ruido(d, t, { dur: .15, vol: .8, f: 3000, f2: 500, q: 1, rel: .1 }); osc(d, t, { tipo: 'square', f: 600, f2: 90, dur: .15, vol: .15, rel: .1 }); },
+    zombi: {
+      comun: (d, t) => gruñido(d, t, { f0: 90, b1: 450, b2: 1000, dur: rnd(.8, 1.3), vol: .55, wob: 7 }),
+      corredor: (d, t) => { for (let i = 0; i < 4; i++) ruido(d, t + i * .22, { dur: .1, vol: .45, f: 1500, q: 1.5, rel: .06, a: .03 }); gruñido(d, t + .9, { f0: 150, b1: 700, b2: 1600, dur: .35, vol: .4, wob: 14 }); },
+      tanque: (d, t) => gruñido(d, t, { f0: 52, b1: 300, b2: 700, dur: rnd(1.3, 1.7), vol: .8, wob: 5, glide: .7 }),
+      griton: (d, t) => gruñido(d, t, { f0: 320, b1: 950, b2: 2600, dur: 1.1, vol: .55, wob: 10, glide: 1.6, rv: .4 }),
+      trepador: (d, t) => { for (let i = 0; i < 6; i++) ruido(d, t + i * .07, { dur: .01, vol: .45, f: 3200, q: 5, rel: .02 }); gruñido(d, t + .45, { f0: 120, b1: 600, b2: 1400, dur: .5, vol: .35, wob: 18, glide: 1.2 }); },
+      jefe: (d, t) => { gruñido(d, t, { f0: 40, b1: 250, b2: 600, dur: 2, vol: 1, wob: 4, glide: .6 }); osc(d, t, { f: 38, f2: 30, dur: 1.6, vol: .5, a: .2, rel: .3 }); }
+    },
+    zpaso: {
+      comun: (d, t) => { ruido(d, t, { dur: .05, vol: 1, tipo: 'lowpass', f: 600, rel: .06 }); ruido(d, t + .05, { dur: .15, vol: .4, f: 800, q: .7, rel: .05, a: .03 }); },
+      corredor: (d, t) => ruido(d, t, { dur: .035, vol: 1, tipo: 'lowpass', f: 850, rel: .05 }),
+      tanque: (d, t) => { osc(d, t, { f: 60, f2: 35, dur: .06, vol: .75, rel: .1 }); ruido(d, t, { dur: .05, vol: .4, tipo: 'lowpass', f: 300, rel: .06 }); },
+      griton: (d, t) => ruido(d, t, { dur: .05, vol: .9, tipo: 'lowpass', f: 650, rel: .06 }),
+      trepador: (d, t) => { ruido(d, t, { dur: .01, vol: .3, tipo: 'highpass', f: 3000, rel: .02 }); ruido(d, t + .05, { dur: .01, vol: .25, tipo: 'highpass', f: 3500, rel: .02 }); },
+      jefe: (d, t) => { osc(d, t, { f: 45, f2: 25, dur: .1, vol: 1, rel: .15 }); ruido(d, t, { dur: .1, vol: .6, tipo: 'lowpass', f: 250, rel: .1 }); }
+    },
+    impacto: (d, t) => { ruido(d, t, { dur: .04, vol: .7, f: 700, q: 1, rel: .05 }); osc(d, t, { f: 180, f2: 90, dur: .03, vol: .3, rel: .05 }); },
+    muerte: (d, t) => { gruñido(d, t, { f0: 85, b1: 420, b2: 950, dur: 1, vol: .5, wob: 9, glide: .45 }); ruido(d, t + .9, { dur: .06, vol: .6, tipo: 'lowpass', f: 400, rel: .2 }); osc(d, t + .9, { f: 70, f2: 40, dur: .05, vol: .5, rel: .15 }); },
+    erro: (d, t) => { ruido(d, t, { dur: .02, vol: .4, f: 2500, q: 2, rel: .05 }); osc(d, t, { f: 3200, f2: 1400, dur: .06, vol: .05, rel: .05 }); },
+    item: {
+      balas: (d, t) => { osc(d, t, { f: 2400, dur: .005, vol: .16, rel: .12 }); osc(d, t + .08, { f: 3150, dur: .005, vol: .14, rel: .12 }); },
+      botiquin: (d, t) => { osc(d, t, { f: 880, dur: .06, vol: .13, rel: .08 }); osc(d, t + .14, { f: 1320, dur: .06, vol: .13, rel: .08 }); },
+      arma: (d, t) => { osc(d, t, { tipo: 'triangle', f: 660, dur: .05, vol: .14, rel: .05 }); osc(d, t + .09, { tipo: 'triangle', f: 880, dur: .05, vol: .14, rel: .05 }); osc(d, t + .18, { tipo: 'triangle', f: 1100, dur: .06, vol: .14, rel: .08 }); },
+      blanca: (d, t) => { ruido(d, t, { dur: .12, vol: .22, f: 5000, f2: 8500, q: 4, rel: .08 }); osc(d, t, { f: 2200, dur: .01, vol: .05, rel: .3 }); },
+      granada: (d, t) => { ruido(d, t, { dur: .008, vol: .3, f: 2500, q: 3, rel: .02 }); osc(d, t + .07, { f: 300, dur: .01, vol: .25, rel: .05 }); ruido(d, t + .2, { dur: .008, vol: .3, f: 2500, q: 3, rel: .02 }); }
+    },
+    radarPared: (d, t, c = .5) => osc(d, t, { tipo: 'square', f: 130 + c * 130, dur: .035, vol: .05 + c * .07, rel: .03 }),
+    radarArbol: (d, t, c = .5) => ruido(d, t, { dur: .06, vol: .1 + c * .18, f: 2300, q: 2, rel: .05, a: .02 }),
+    radarPuerta: (d, t) => { osc(d, t, { tipo: 'triangle', f: 520, dur: .04, vol: .12, rel: .05 }); osc(d, t + .09, { tipo: 'triangle', f: 780, dur: .04, vol: .12, rel: .06 }); },
+    choque: (d, t) => { osc(d, t, { f: 80, f2: 55, dur: .03, vol: .6, rel: .1 }); ruido(d, t, { dur: .03, vol: .45, tipo: 'lowpass', f: 400, rel: .05 }); },
+    agarre: (d, t) => { osc(d, t, { tipo: 'square', f: 950, dur: .06, vol: .2, rel: .02 }); osc(d, t + .11, { tipo: 'square', f: 700, dur: .06, vol: .2, rel: .02 }); },
+    mordida: (d, t) => { ruido(d, t, { dur: .08, vol: .9, f: 1200, q: 1, rel: .08 }); osc(d, t, { tipo: 'sawtooth', f: 180, f2: 90, dur: .12, vol: .25, rel: .1 }); },
+    dolor: (d, t) => osc(d, t, { tipo: 'sawtooth', f: 170, f2: 110, dur: .12, vol: .12, rel: .08 }),
+    latido: (d, t) => { osc(d, t, { f: 55, dur: .04, vol: .6, rel: .1 }); osc(d, t + .18, { f: 50, dur: .04, vol: .45, rel: .1 }); },
+    peligro: (d, t) => osc(d, t, { f: 110, dur: .05, vol: .35, rel: .1 }),
+    granadaTirar: (d, t) => ruido(d, t, { dur: .2, vol: .3, f: 800, f2: 2000, q: 2, rel: .05 }),
+    granadaCae: (d, t) => { osc(d, t, { f: 900, dur: .01, vol: .3, rel: .12 }); osc(d, t + .12, { f: 1300, dur: .01, vol: .2, rel: .08 }); },
+    granadaTic: (d, t) => osc(d, t, { f: 2000, dur: .005, vol: .15, rel: .02 }),
+    explosion: (d, t) => { ruido(d, t, { dur: .3, vol: 1.3, tipo: 'lowpass', f: 3000, f2: 180, rel: 1.4 }); osc(d, t, { f: 60, f2: 25, dur: .3, vol: 1, rel: 1 }); },
+    trepar: (d, t) => { for (let i = 0; i < 5; i++) ruido(d, t + i * .28, { dur: .08, vol: .3, f: rnd(1000, 2000), q: 1.5, rel: .05 }); },
+    bajar: (d, t) => { ruido(d, t, { dur: .3, vol: .25, f: 1500, q: 1, rel: .05 }); osc(d, t + .55, { f: 90, f2: 50, dur: .04, vol: .5, rel: .1 }); },
+    rascar: (d, t) => { ruido(d, t, { dur: .05, vol: .3, tipo: 'highpass', f: 2500, rel: .03 }); ruido(d, t + .07, { dur: .05, vol: .25, f: 1200, rel: .03 }); },
+    cuenta: (d, t) => osc(d, t, { f: 880, dur: .08, vol: .25, rel: .05 }),
+    rondaInicio: (d, t) => { for (const f of [220, 277, 330]) osc(d, t, { tipo: 'sawtooth', f, dur: .6, vol: .08, a: .02, rel: .3 }); },
+    rondaFin: (d, t) => { [523, 659, 784, 1047].forEach((f, i) => osc(d, t + i * .1, { tipo: 'triangle', f, dur: .08, vol: .18, rel: .15 })); },
+    racha: (d, t) => osc(d, t, { tipo: 'triangle', f: 784, f2: 1568, dur: .15, vol: .2, rel: .1 }),
+    curar: (d, t) => osc(d, t, { f: 600, f2: 1200, dur: .3, vol: .2, rel: .1 }),
+    juntar: (d, t) => { osc(d, t, { f: 1000, dur: .02, vol: .15, rel: .03 }); osc(d, t + .06, { f: 1500, dur: .02, vol: .15, rel: .04 }); },
+    nada: (d, t) => osc(d, t, { tipo: 'square', f: 200, dur: .08, vol: .06, rel: .04 }),
+    muerteJugador: (d, t) => { osc(d, t, { tipo: 'sawtooth', f: 200, f2: 40, dur: 1.2, vol: .25, rel: .5 }); ruido(d, t, { dur: .8, vol: .3, tipo: 'lowpass', f: 1200, f2: 100, rel: .5 }); }
+  };
+
+  // Sonido sin posición (en el centro)
+  function sonar(fn, vol = 1, extra) {
+    if (!ctx) return;
+    const g = ctx.createGain(); g.gain.value = vol; g.connect(master);
+    fn(g, ctx.currentTime + 0.01, extra);
+    setTimeout(() => g.disconnect(), 8000);
+  }
+  // Sonido ubicado en el mapa
+  function sonar3D(x, y, fn, { vol = 1, maxD = 35, extra } = {}) {
+    if (!ctx || !J) return;
+    const P = J.jug, dx = x - P.x, dy = y - P.y, d = Math.hypot(dx, dy);
+    if (d > maxD) return;
+    const rel = d < 0.05 ? 0 : normAng(Math.atan2(dx, -dy) - P.ang);
+    const c = Math.cos(rel);
+    let g = vol / (1 + Math.pow(d / 4, 1.4));
+    let lp = c >= 0 ? 20000 : 550 + 2500 * (1 + c);
+    lp = Math.min(lp, Math.max(1800, 20000 - d * 600));
+    if (d > 1.5 && !P.arbol && !visible(P.x, P.y, x, y)) { lp = Math.min(lp, 700); g *= 0.55; }
+    if (c < 0) g *= 0.6;
+    const gn = ctx.createGain(); gn.gain.value = g;
+    const f = ctx.createBiquadFilter(); f.type = 'lowpass'; f.frequency.value = lp;
+    const p = ctx.createStereoPanner(); p.pan.value = clamp(Math.sin(rel) * 0.95, -1, 1);
+    gn.connect(f); f.connect(p); p.connect(master);
+    fn(gn, ctx.currentTime + 0.01, extra);
+    setTimeout(() => { gn.disconnect(); f.disconnect(); p.disconnect(); }, 8000);
+  }
+
+  // ================= Sonidos reales =================
+  const BUF = {};
+  const VAR = {};
+  function cargarSonidos() {
+    const datos = window.SONIDOS_ZOMBIS;
+    if (!datos) return Promise.resolve();
+    $('#cargando').textContent = 'Cargando sonidos...';
+    const tareas = Object.entries(datos).map(([n, b64]) => {
+      const bin = atob(b64), u = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);
+      return ctx.decodeAudioData(u.buffer).then(b => { BUF[n] = b; }).catch(() => {});
+    });
+    return Promise.all(tareas).then(() => { window.SONIDOS_ZOMBIS = null; $('#cargando').textContent = ''; });
+  }
+  function variantes(pre) {
+    if (!VAR[pre]) { const re = new RegExp('^' + pre.replace(/\./g, '\\.') + '\\d+$'); VAR[pre] = Object.keys(BUF).filter(k => re.test(k)); }
+    return VAR[pre];
+  }
+  function tocar(dest, t, nombre, { rate = 1, vol = 1, offset = 0, dur } = {}) {
+    const b = BUF[nombre];
+    if (!b) return false;
+    const s = ctx.createBufferSource(); s.buffer = b; s.playbackRate.value = rate;
+    const g = ctx.createGain(); g.gain.value = vol;
+    s.connect(g); g.connect(dest);
+    if (dur) s.start(t, offset, dur); else s.start(t, offset);
+    return true;
+  }
+  function tocarVar(dest, t, pre, o) {
+    const l = variantes(pre);
+    if (!l.length) return tocar(dest, t, pre, o);
+    return tocar(dest, t, elegir(l), o);
+  }
+  // Devuelve una función de sonido: el real si está, si no el de respaldo
+  const SR = (nombre, o, resp) => (d, t, x) => { if (!tocarVar(d, t, nombre, typeof o === 'function' ? o(x) : o) && resp) resp(d, t, x); };
+  const sueloMuerte = s => ({ pasto: 'pasto', hojas: 'pasto', agua: 'agua', madera: 'madera', baldosa: 'duro' })[s] || 'tierra';
+  const BLANCA_SND = { cuchillo: 'cuchillo', machete: 'machete', hacha: 'hacha', martillo: 'martillo', golf: 'machete', bate: 'hacha', espada: 'machete', motosierra: 'motosierra', puños: 'martillo' };
+  const BLANCA_RATE = { golf: 1.2, bate: .9, espada: .85, puños: 1.4 };
+  const GOLPE_ZOMBI = { cuchillo: 'cuchillo', machete: 'machete', hacha: 'hacha', martillo: 'martillo', golf: 'martillo', bate: 'martillo', espada: 'espada', motosierra: 'motosierra', puños: 'martillo' };
+  // sonidos de armas de fuego
+  const SA = (id, accion) => SR(`${id}.${accion}`, { rate: accion === 'fire' ? rnd(.97, 1.03) : 1 }, {
+    fire: S[ARMAS_SND[id]] || S.pistola, empty: S.vacio, reloading: S.recargaIni, reloaded: S.recargaFin, draw: S.cambio, wall: S.erro }[accion]);
+  const ARMAS_SND = { pistola: 'pistola', escopeta: 'escopeta', ametralladora: 'ametralladora', rifle: 'rifle' };
+  const swingBlanca = tipo => SR(`${BLANCA_SND[tipo]}.fire`, { rate: BLANCA_RATE[tipo] || 1, vol: tipo === 'puños' ? .5 : 1 }, S.swing);
+  const golpeZombi = (z, tipo) => SR(`z.${z.tipo}.hit.${GOLPE_ZOMBI[tipo]}`, { rate: rnd(.95, 1.05) }, S.golpe[tipo] || S.impacto);
+  const impactoZombi = (z, clase) => SR(`z.${z.tipo}.hit.${clase}`, { rate: rnd(.95, 1.05) }, S.impacto);
+  const muerteZombi = z => SR(`z.${z.tipo}.muerte.${sueloMuerte(J.mapa.suelo[Math.floor(z.y) * J.mapa.W + Math.floor(z.x)])}`, {}, S.muerte);
+  const ataqueZombi = z => SR(`z.${z.tipo}.attack`, { rate: rnd(.95, 1.05) }, S.mordida);
+  function sonidoItem(it) {
+    if (it.tipo === 'balas') return SR(Math.random() < .5 ? 'balas.piso' : 'balas.piso2', { vol: 1.3 }, S.item.balas);
+    if (it.tipo === 'botiquin') return SR('botiquin.piso', { vol: .9 }, S.item.botiquin);
+    if (it.tipo === 'granada') return SR('get.granada', { vol: .7 }, S.item.granada);
+    if (it.tipo === 'caja') return S.cajaPiso;
+    if (it.tipo === 'arma') return SR(`${it.sub}.draw`, { vol: .8 }, S.item.arma);
+    return SR(`${BLANCA_SND[it.sub]}.draw`, { vol: .8, dur: 1 }, S.item.blanca);
+  }
+  function sonidoJuntar(it) {
+    if (it.tipo === 'balas') return SR(MUN[it.sub].get, {}, S.juntar);
+    if (it.tipo === 'botiquin') return SR('get.botiquin', {}, S.juntar);
+    if (it.tipo === 'granada') return SR('get.granada', {}, S.juntar);
+    if (it.tipo === 'caja') return SR('caja.piso', {}, S.juntar);
+    if (it.tipo === 'arma') return SR(`get.${it.sub}`, {}, S.juntar);
+    return SR(it.sub === 'cuchillo' ? 'get.cuchillo' : 'get.blanca', {}, S.juntar);
+  }
+  // reemplazos directos del catálogo
+  for (const k of Object.keys(S.paso)) S.paso[k] = SR(`paso.${k}`, { vol: .9 }, S.paso[k]);
+  S.paso.barro = SR('paso.barro', { vol: .9 }, S.paso.tierra);
+  for (const k of Object.keys(S.zombi)) S.zombi[k] = SR(`z.${k}.growl`, () => ({ rate: rnd(.94, 1.06) }), S.zombi[k]);
+  for (const k of Object.keys(S.zpaso)) {
+    const viejo = S.zpaso[k];
+    S.zpaso[k] = (d, t, suelo) => {
+      if (k === 'jefe') { if (!tocarVar(d, t, 'jefe.paso', { vol: .8 })) viejo(d, t); return; }
+      const o = { comun: { rate: .8, vol: .7 }, corredor: { rate: 1.05, vol: .7 }, tanque: { rate: .62, vol: 1.1 }, griton: { rate: .85, vol: .6 }, trepador: { rate: 1.1, vol: .5 } }[k];
+      if (!tocarVar(d, t, `paso.${suelo || 'tierra'}`, o)) viejo(d, t);
+    };
+  }
+  Object.assign(S, {
+    radarPared: SR('radar.pared', c => ({ vol: .5 + (c || .5) * .7, rate: 1 + (c || 0) * .25 }), S.radarPared),
+    radarArbol: SR('radar.arbol', c => ({ vol: .5 + (c || .5) * .8 }), S.radarArbol),
+    radarPuerta: SR('radar.puerta', { vol: 1 }, S.radarPuerta),
+    choque: SR('choque', { vol: .9 }, S.choque),
+    dolor: SR('herido', { vol: 1 }, S.dolor),
+    latido: SR('latido', { vol: 1.2 }, S.latido),
+    peligro: SR('radar.enemigo', { vol: .7 }, S.peligro),
+    granadaTirar: SR('granada.tirar', {}, S.granadaTirar),
+    granadaCae: SR('get.granada', { vol: .6, rate: .8 }, S.granadaCae),
+    explosion: SR('granada.explota', {}, S.explosion),
+    rotura: SR('arma.rota', {}, S.rotura),
+    gastada: SR('arma.gastada', {}, S.nada),
+    curar: SR('botiquin.usar', {}, S.curar),
+    cuenta: SR('cuenta', { vol: 1.5 }, S.cuenta),
+    rondaInicio: SR('ronda.inicio', { vol: 1 }, S.rondaInicio),
+    rondaFin: SR('ronda.fin', { vol: .9 }, S.rondaFin),
+    muerteJugador: SR('muerte.jugador', {}, S.muerteJugador),
+    trepar: (d, t) => { for (let i = 0; i < 3; i++) if (!tocar(d, t + i * .5, 'radar.arbol', { vol: .8, rate: rnd(.9, 1.1) })) { S.rascar(d, t); break; } },
+    bajar: (d, t) => { tocar(d, t, 'radar.arbol', { vol: .8 }); tocarVar(d, t + .7, 'paso.tierra', { vol: 1.2, rate: .8 }); },
+    grito: SR('grito', {}, S.zombi.griton),
+    jefeAparece: SR('jefe.aparece', {}, S.zombi.jefe),
+    devorar: SR('devorar', {}, S.mordida),
+    tiendaMusica: SR('tienda.musica', { vol: 1 }, (d, t) => { [523, 659, 784].forEach((f, i) => osc(d, t + i * .2, { tipo: 'triangle', f, dur: .1, vol: .12, rel: .1 })); }),
+    menuMover: SR('menu.mover', { vol: .8 }, S.brujula),
+    menuAbrir: SR('menu.abrir', {}, S.rondaFin),
+    menuCerrar: SR('menu.cerrar', {}, S.cambio),
+    menuError: SR('menu.error', {}, S.nada),
+    compra: SR('menu.compra', {}, S.juntar),
+    chaleco: SR('get.chaleco', {}, S.juntar),
+    cajaCae: SR('caja.cae', { vol: 1.2 }, S.granadaCae),
+    cajaPiso: SR('caja.piso', { vol: .8 }, S.item.arma),
+    misionDificil: SR('mision.dificil', { vol: .9 }, S.rondaInicio),
+    misionOk: SR('ronda.fin', { vol: .9 }, S.rondaFin),
+    martillazo: SR('martillo.wall', () => ({ vol: .9, rate: rnd(.9, 1.1) }), S.golpe.martillo),
+    barricadaGolpe: SR('hacha.wall', () => ({ vol: 1, rate: rnd(.85, 1.05) }), S.choque),
+    barricadaRota: (d, t) => { S.rotura(d, t); S.choque(d, t + .1); },
+    guia: SR('cuenta', r => ({ vol: 1.4, rate: r || 1 }), (d, t, r) => osc(d, t, { tipo: 'triangle', f: 700 * (r || 1), dur: .04, vol: .2, rel: .05 }))
+  });
+
+  // ================= Datos del juego =================
+  const ARMAS = {
+    pistola:       { nombre: 'Pistola', art: 'la pistola', tecla: '1', dmg: 25, rango: 25, cad: .35, carg: 12, rec: 1.4, tol: 7, desg: .6, mun: 'p', imp: 'bala' },
+    revolver:      { nombre: 'Revólver', art: 'el revólver', tecla: '2', dmg: 55, rango: 28, cad: .6, carg: 6, rec: 2.2, tol: 6, desg: .8, mun: 'rv', imp: 'bala' },
+    escopeta:      { nombre: 'Escopeta', art: 'la escopeta', tecla: '3', dmg: 26, perd: 3, cerca: true, rango: 12, cad: .9, carg: 6, rec: 2.6, tol: 13, desg: 1.2, mun: 'e', imp: 'perdigon' },
+    doble:         { nombre: 'Escopeta doble', art: 'la escopeta doble', tecla: '4', dmg: 42, perd: 4, cerca: true, rango: 10, cad: .35, carg: 2, rec: 2.4, tol: 15, desg: 1.6, mun: 'e', imp: 'perdigon' },
+    subfusil:      { nombre: 'Subfusil', art: 'el subfusil', tecla: '5', dmg: 11, rango: 18, cad: .08, carg: 30, rec: 1.8, tol: 9, desg: .18, mun: 'p', imp: 'rafaga', auto: true },
+    fusil:         { nombre: 'Fusil de asalto', art: 'el fusil de asalto', tecla: '6', dmg: 17, rango: 30, cad: .1, carg: 30, rec: 2, tol: 7, desg: .2, mun: 'f5', imp: 'rafaga', auto: true },
+    ametralladora: { nombre: 'Ametralladora', art: 'la ametralladora', tecla: '7', dmg: 20, rango: 28, cad: .09, carg: 100, rec: 4, tol: 8, desg: .12, mun: 'f7', imp: 'vulcan', auto: true },
+    rifle:         { nombre: 'Rifle', art: 'el rifle', tecla: '8', dmg: 110, rango: 45, cad: 1.3, carg: 5, rec: 2.5, tol: 4.5, desg: 1.4, mun: 'f7', imp: 'rifle' },
+    francotirador: { nombre: 'Francotirador', art: 'el francotirador', tecla: '9', dmg: 300, perd: 3, rango: 60, cad: 2, carg: 5, rec: 3.2, tol: 3.5, desg: 2, mun: 'b', imp: 'rifle' },
+    lanzagranadas: { nombre: 'Lanzagranadas', art: 'el lanzagranadas', tecla: '0', dmg: 0, rango: 30, cad: 1, carg: 1, rec: 1.6, tol: 9, desg: 3, mun: 'g', explota: true },
+    ballesta:      { nombre: 'Ballesta', art: 'la ballesta', tecla: 'la de la derecha del 0', dmg: 90, rango: 35, cad: .8, carg: 1, rec: 1.5, tol: 5, desg: 1, mun: 'fl', imp: 'flecha' }
+  };
+  const ORDEN_ARMAS = Object.keys(ARMAS);
+  const MUN = {
+    p:  { nombre: 'balas de 9 milímetros', paquete: 15, max: 150, get: 'get.9mm' },
+    rv: { nombre: 'balas de revólver', paquete: 6, max: 48, get: 'get.45' },
+    e:  { nombre: 'cartuchos de escopeta', paquete: 6, max: 40, get: 'get.cartuchos' },
+    f5: { nombre: 'balas de fusil', paquete: 30, max: 180, get: 'get.556' },
+    f7: { nombre: 'balas de ametralladora y rifle', paquete: 30, max: 200, get: 'get.762' },
+    b:  { nombre: 'balas de francotirador', paquete: 4, max: 20, get: 'get.50' },
+    g:  { nombre: 'granadas de lanzagranadas', paquete: 2, max: 10, get: 'get.g40' },
+    fl: { nombre: 'flechas', paquete: 5, max: 30, get: 'get.flechas' }
+  };
+  const BLANCAS = {
+    cuchillo:   { nombre: 'Cuchillo', art: 'el cuchillo', dmg: 25, cad: .35, desg: 2.5, emp: .8 },
+    machete:    { nombre: 'Machete', art: 'el machete', dmg: 40, cad: .5, desg: 2, emp: 1 },
+    hacha:      { nombre: 'Hacha', art: 'el hacha', dmg: 65, cad: .85, desg: 1.6, emp: 1.6 },
+    martillo:   { nombre: 'Martillo', art: 'el martillo', dmg: 45, cad: .6, desg: 1.3, emp: 1.3 },
+    golf:       { nombre: 'Palo de golf', art: 'el palo de golf', dmg: 35, cad: .5, desg: 3, emp: 1.4 },
+    bate:       { nombre: 'Bate', art: 'el bate', dmg: 50, cad: .65, desg: 1.8, emp: 1.8 },
+    espada:     { nombre: 'Espada', art: 'la espada', dmg: 55, cad: .55, desg: 1.4, emp: 1.2 },
+    motosierra: { nombre: 'Motosierra', art: 'la motosierra', dmg: 85, cad: .4, desg: 2.4, emp: .6 }
+  };
+  const PUÑOS = { nombre: 'Manos', dmg: 8, cad: .5, emp: .9 };
+  const ZTIPOS = {
+    comun:    { nombre: 'zombi común', vida: 50, vel: 1.0, dmg: 10, pts: 10, gr: [2, 4.5], paso: .9 },
+    corredor: { nombre: 'corredor', vida: 35, vel: 3.0, dmg: 8, pts: 15, gr: [1.5, 3], paso: .3 },
+    tanque:   { nombre: 'zombi gordo', vida: 220, vel: .8, dmg: 25, pts: 30, gr: [2.5, 4], paso: 1.1 },
+    griton:   { nombre: 'gritón', vida: 40, vel: 1.2, dmg: 5, pts: 20, gr: [3, 5], paso: .8 },
+    trepador: { nombre: 'trepador', vida: 60, vel: 1.6, dmg: 12, pts: 20, gr: [2, 3.5], paso: .5 },
+    jefe:     { nombre: 'jefe', vida: 900, vel: 1.1, dmg: 35, pts: 250, gr: [2.5, 4], paso: 1.0 }
+  };
+  const MAPAS = {
+    bosque:   { nombre: 'Bosque', w: 50, h: 50, arboles: .07, suelo: 'pasto', manchas: 'tierra' },
+    selva:    { nombre: 'Selva', w: 50, h: 50, arboles: .09, suelo: 'hojas', manchas: 'barro' },
+    jungla:   { nombre: 'Jungla', w: 50, h: 50, arboles: .11, suelo: 'hojas', manchas: 'agua' },
+    desierto: { nombre: 'Desierto', w: 54, h: 54, arboles: .012, suelo: 'arena', manchas: 'tierra' },
+    casa:     { nombre: 'Casa grande', w: 44, h: 32, casa: true, suelo: 'madera', manchas: 'baldosa' }
+  };
+  const VACIO = 0, PARED = 1, PUERTA = 2, ARBOL = 3, BARRICADA = 4;
+  const ZONAS = [
+    { nombre: 'Cabeza', tol: .6, dmg: 2, pts: 1.5 },
+    { nombre: 'Pecho', tol: 1, dmg: 1, pts: 1 },
+    { nombre: 'Piernas', tol: 1.2, dmg: .6, pts: 1 }
+  ];
+
+  let J = null;          // estado de la partida
+  let ultimoMapa = 'aleatorio';
+
+  // ================= Mapa =================
+  function crearMapa(id) {
+    const M = MAPAS[id];
+    const W = M.w, H = M.h;
+    const g = new Uint8Array(W * H), suelo = new Array(W * H).fill(M.suelo);
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) if (x === 0 || y === 0 || x === W - 1 || y === H - 1) g[y * W + x] = PARED;
+    // manchas de suelo
+    for (let i = 0; i < (M.casa ? 0 : 10); i++) {
+      const cx = rndi(3, W - 4), cy = rndi(3, H - 4), r = rnd(1.5, 4);
+      for (let y = Math.floor(cy - r); y <= cy + r; y++) for (let x = Math.floor(cx - r); x <= cx + r; x++)
+        if (x > 0 && y > 0 && x < W - 1 && y < H - 1 && Math.hypot(x - cx, y - cy) <= r) suelo[y * W + x] = M.manchas;
+    }
+    let inicio;
+    if (M.casa) {
+      const salas = [];
+      const dividir = (x0, y0, x1, y1, prof) => {
+        const w = x1 - x0 + 1, h = y1 - y0 + 1;
+        const vertical = w >= h;
+        const largo = vertical ? w : h;
+        if (largo < 9 || prof > 5) { salas.push({ x0, y0, x1, y1 }); return; }
+        for (let intento = 0; intento < 12; intento++) {
+          const pos = vertical ? rndi(x0 + 3, x1 - 3) : rndi(y0 + 3, y1 - 3);
+          const a = vertical ? [pos, y0 - 1] : [x0 - 1, pos], b = vertical ? [pos, y1 + 1] : [x1 + 1, pos];
+          if (g[a[1] * W + a[0]] === PUERTA || g[b[1] * W + b[0]] === PUERTA) continue;
+          const desde = vertical ? y0 : x0, hasta = vertical ? y1 : x1;
+          for (let k = desde; k <= hasta; k++) g[vertical ? k * W + pos : pos * W + k] = PARED;
+          const puertas = (hasta - desde) > 10 ? 2 : 1;
+          for (let p = 0; p < puertas; p++) {
+            const k = puertas === 1 ? rndi(desde, hasta) : (p === 0 ? rndi(desde, Math.floor((desde + hasta) / 2)) : rndi(Math.ceil((desde + hasta) / 2), hasta));
+            g[vertical ? k * W + pos : pos * W + k] = PUERTA;
+          }
+          if (vertical) { dividir(x0, y0, pos - 1, y1, prof + 1); dividir(pos + 1, y0, x1, y1, prof + 1); }
+          else { dividir(x0, y0, x1, pos - 1, prof + 1); dividir(x0, pos + 1, x1, y1, prof + 1); }
+          return;
+        }
+        salas.push({ x0, y0, x1, y1 });
+      };
+      dividir(1, 1, W - 2, H - 2, 0);
+      for (const s of salas) if (Math.random() < .35) for (let y = s.y0; y <= s.y1; y++) for (let x = s.x0; x <= s.x1; x++) suelo[y * W + x] = 'baldosa';
+      const cx = W / 2, cy = H / 2;
+      salas.sort((a, b) => Math.hypot((a.x0 + a.x1) / 2 - cx, (a.y0 + a.y1) / 2 - cy) - Math.hypot((b.x0 + b.x1) / 2 - cx, (b.y0 + b.y1) / 2 - cy));
+      const s = salas[0];
+      inicio = { x: Math.floor((s.x0 + s.x1) / 2) + .5, y: Math.floor((s.y0 + s.y1) / 2) + .5 };
+    } else {
+      inicio = { x: W / 2 + .5, y: H / 2 + .5 };
+      for (let y = 1; y < H - 1; y++) for (let x = 1; x < W - 1; x++) {
+        if (Math.hypot(x + .5 - inicio.x, y + .5 - inicio.y) < 3.5) continue;
+        if (Math.random() < M.arboles) g[y * W + x] = ARBOL;
+      }
+      // en el desierto, que siempre haya algunos árboles a mano
+      if (id === 'desierto') for (let i = 0; i < 4; i++) {
+        const a = rnd(0, TAU), r = rnd(5, 9);
+        const x = Math.floor(inicio.x + Math.sin(a) * r), y = Math.floor(inicio.y - Math.cos(a) * r);
+        g[y * W + x] = ARBOL;
+      }
+    }
+    return { id, W, H, g, suelo, inicio, casa: !!M.casa, nombre: M.nombre };
+  }
+  const celda = (x, y) => { const m = J.mapa; x = Math.floor(x); y = Math.floor(y); if (x < 0 || y < 0 || x >= m.W || y >= m.H) return PARED; return m.g[y * m.W + x]; };
+  const bloquea = c => c === PARED || c === ARBOL || c === BARRICADA;
+  function libre(x, y, r = .28) {
+    for (let cy = Math.floor(y - r); cy <= Math.floor(y + r); cy++)
+      for (let cx = Math.floor(x - r); cx <= Math.floor(x + r); cx++) {
+        if (!bloquea(celda(cx, cy))) continue;
+        const nx = clamp(x, cx, cx + 1), ny = clamp(y, cy, cy + 1);
+        if ((x - nx) ** 2 + (y - ny) ** 2 < r * r) return false;
+      }
+    return true;
+  }
+  function visible(x0, y0, x1, y1, arbolesTapan = true) {
+    const d = Math.hypot(x1 - x0, y1 - y0), n = Math.ceil(d / .25);
+    for (let i = 1; i < n; i++) {
+      const c = celda(x0 + (x1 - x0) * i / n, y0 + (y1 - y0) * i / n);
+      if (c === PARED || c === BARRICADA || (arbolesTapan && c === ARBOL)) return false;
+    }
+    return true;
+  }
+  function rayo(x, y, ang, max) {
+    const sx = Math.sin(ang), sy = -Math.cos(ang);
+    for (let d = .1; d <= max; d += .05) {
+      const c = celda(x + sx * d, y + sy * d);
+      if (bloquea(c)) return { d, c };
+    }
+    return null;
+  }
+  function celdaLibreAleatoria(cond) {
+    const m = J.mapa;
+    for (let i = 0; i < 400; i++) {
+      const x = rndi(1, m.W - 2), y = rndi(1, m.H - 2);
+      if (m.g[y * m.W + x] !== VACIO) continue;
+      if (cond && !cond(x + .5, y + .5, y * m.W + x)) continue;
+      return { x: x + .5, y: y + .5 };
+    }
+    return null;
+  }
+
+  // Camino de los zombis hacia el jugador (mapa de distancias)
+  function calcularCampo() {
+    const m = J.mapa, P = J.jug, N = m.W * m.H;
+    if (!J.campo) J.campo = new Int32Array(N);
+    const c = J.campo; c.fill(-1);
+    const ini = Math.floor(P.y) * m.W + Math.floor(P.x);
+    const cola = new Int32Array(N); let a = 0, b = 0;
+    c[ini] = 0; cola[b++] = ini;
+    while (a < b) {
+      const i = cola[a++], x = i % m.W, y = (i / m.W) | 0;
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const nx = x + dx, ny = y + dy, n = ny * m.W + nx;
+        if (nx < 0 || ny < 0 || nx >= m.W || ny >= m.H || c[n] >= 0 || bloquea(m.g[n])) continue;
+        c[n] = c[i] + 1; cola[b++] = n;
+      }
+    }
+    J.campoCelda = ini;
+    // camino de los zombis hacia las barricadas (cuando no pueden llegar al jugador)
+    if (J.barricadas && J.barricadas.size) {
+      if (!J.campoB) J.campoB = new Int32Array(N);
+      const cb = J.campoB; cb.fill(-1); a = 0; b = 0;
+      for (const i of J.barricadas.keys()) for (const n of [i - 1, i + 1, i - m.W, i + m.W]) if (!bloquea(m.g[n]) && cb[n] < 0) { cb[n] = 0; cola[b++] = n; }
+      while (a < b) {
+        const i = cola[a++], x = i % m.W, y = (i / m.W) | 0;
+        for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+          const nx = x + dx, ny = y + dy, n = ny * m.W + nx;
+          if (nx < 0 || ny < 0 || nx >= m.W || ny >= m.H || cb[n] >= 0 || bloquea(m.g[n])) continue;
+          cb[n] = cb[i] + 1; cola[b++] = n;
+        }
+      }
+    } else J.campoB = null;
+  }
+
+  // ================= Partida =================
+  let modoPractica = false;
+  function nuevaPartida(idMapa) {
+    iniciarAudio();
+    const id = idMapa === 'aleatorio' ? elegir(Object.keys(MAPAS)) : idMapa;
+    J = {
+      mapaElegido: idMapa, practica: modoPractica, barricadas: new Map(), mision: null, misionDificil: null, proxDificil: rndi(3, 5), cajaT: rnd(50, 80), jugadores: 1, ronda: 0, fase: 'recoleccion', faseT: 60, avisosFase: {},
+      puntos: 0, plata: 0, muertes: 0, racha: 0, zombis: [], items: [], granadas: [], porSalir: [], salidaT: 0, sigId: 1,
+      tiempo: 0, pausa: false, lock: null, lockT: 0, pistaT: 0, radarT: { frente: 0, izq: 0, der: 0, puerta: 0 },
+      latidoT: 0, peligroT: 0, itemAviso: null, ambT: 2, choqueT: 0, campoT: 0
+    };
+    J.mapa = crearMapa(id);
+    J.jug = {
+      x: J.mapa.inicio.x, y: J.mapa.inicio.y, ang: 0, pitch: 0, vida: 100,
+      arbol: null, trepando: 0, bajando: 0, distPaso: 0, zona: 1,
+      armas: { pistola: { dur: 100, carg: 12, avisos: {}, rep: [] } }, actual: 'pistola',
+      mun: Object.fromEntries(Object.keys(MUN).map(k => [k, k === 'p' ? 12 : 0])),
+      blanca: { tipo: 'cuchillo', dur: 100, avisos: {} }, blancasRep: [],
+      granadas: 1, botiquines: 0, chaleco: 0, recargando: 0, cadT: 0, blancaT: 0, curandoT: 0,
+      agarrado: null, agarreT: 0, alarmaT: 0, ultimoOctante: 0
+    };
+    repartirItems(36 + (J.mapa.casa ? 0 : 6), true);
+    calcularCampo();
+    const ini = J.mapa.inicio;
+    J.tienda = celdaLibreAleatoria((x, y, i) => { const d = Math.hypot(x - ini.x, y - ini.y); return d > 5 && d < 14; }) || celdaLibreAleatoria();
+    J.tiendaT = 1;
+    iniciarAmbiente();
+    mostrar('juego');
+    $('#zonaJuego').focus();
+    anunciar(`${J.practica ? 'Práctica. ' : ''}${J.mapa.nombre}. Tenés 60 segundos para juntar cosas antes de que lleguen los zombis. Escape para pausa.`);
+    J.avisosFase[60] = true;
+    actualizarHud();
+  }
+
+  function crearItem(tipo, sub, x, y, extra = {}) {
+    const it = { tipo, sub, x, y, beaconT: rnd(0, 2), ...extra };
+    if (tipo === 'balas' && it.cant == null) it.cant = MUN[sub].paquete;
+    if ((tipo === 'arma' || tipo === 'blanca') && it.dur == null) it.dur = rndi(55, 100);
+    J.items.push(it);
+    return it;
+  }
+  function repartirItems(n, inicio) {
+    const P = J.jug;
+    const lejos = (x, y) => Math.hypot(x - P.x, y - P.y) > 2 && !J.items.some(i => Math.hypot(i.x - x, i.y - y) < 2);
+    const lista = [];
+    const tieneArma = id => P.armas[id] || J.items.some(i => i.tipo === 'arma' && i.sub === id);
+    if (inicio) {
+      const otras = ORDEN_ARMAS.filter(a => a !== 'pistola').sort(() => Math.random() - .5).slice(0, 5);
+      for (const a of otras) lista.push(['arma', a]);
+      for (let i = 0; i < 5; i++) lista.push(['blanca', elegir(Object.keys(BLANCAS))]);
+      for (let i = 0; i < 4; i++) lista.push(['botiquin']);
+      for (let i = 0; i < 4; i++) lista.push(['granada']);
+    } else {
+      const r = J.ronda;
+      lista.push(['botiquin'], ['granada'], ['blanca', elegir(Object.keys(BLANCAS))]);
+      if (r >= 5) lista.push(['botiquin'], ['blanca', elegir(Object.keys(BLANCAS))]);
+      if (r >= 15) lista.push(['botiquin'], ['granada']);
+      const falta = ORDEN_ARMAS.filter(a => !tieneArma(a));
+      if (falta.length) lista.push(['arma', elegir(falta)]);
+      const extra = 1 + Math.floor(r / 6);
+      for (let i = 0; i < extra; i++) lista.push(['arma', elegir(ORDEN_ARMAS)]);
+    }
+    // balas: más de las armas que hay en juego
+    const enJuego = new Set([...Object.keys(P.armas), ...J.items.filter(i => i.tipo === 'arma').map(i => i.sub), ...lista.filter(l => l[0] === 'arma').map(l => l[1])].map(a => ARMAS[a].mun));
+    const tiposMun = Object.keys(MUN);
+    while (lista.length < n) lista.push(['balas', Math.random() < .75 && enJuego.size ? elegir([...enJuego]) : elegir(tiposMun)]);
+    for (const [tipo, sub] of lista) {
+      const c = celdaLibreAleatoria(lejos);
+      if (c) crearItem(tipo, sub, c.x, c.y);
+    }
+  }
+
+  // ================= Rondas =================
+  function empezarRonda() {
+    if (J.tiendaAbierta) { J.tiendaAbierta = null; sonar(S.menuCerrar, .8); }
+    J.ronda++;
+    J.fase = 'ronda';
+    const r = J.ronda, f = 1 + 0.6 * (J.jugadores - 1);
+    const total = Math.round((5 + 3 * (r - 1)) * f);
+    const pesos = { comun: 10 };
+    if (r >= 2) pesos.corredor = 3 + r * .5;
+    if (r >= 3) pesos.griton = 2;
+    if (r >= 3 && !J.mapa.casa) pesos.trepador = 2.5;
+    if (r >= 4) pesos.tanque = 1.5 + r * .2;
+    const suma = Object.values(pesos).reduce((a, b) => a + b, 0);
+    J.porSalir = [];
+    for (let i = 0; i < total; i++) {
+      let x = Math.random() * suma;
+      for (const [k, p] of Object.entries(pesos)) { x -= p; if (x <= 0) { J.porSalir.push(k); break; } }
+    }
+    if (r % 5 === 0) J.porSalir.push('jefe');
+    J.salidaT = 1.5;
+    sonar(S.rondaInicio, 1);
+    let txt = r % 5 === 0 ? `Ronda ${r}. ¡Viene un jefe!` : `Ronda ${r}. ¡Vienen los zombis!`;
+    txt += ' ' + nuevasMisiones();
+    anunciar(txt);
+  }
+  function terminarRonda() {
+    const textoMision = registrar({ tipo: 'finRonda' }) || '';
+    const bonus = 50 * J.ronda;
+    J.puntos += bonus; J.plata += bonus;
+    J.fase = 'descanso'; J.faseT = 45; J.avisosFase = { 45: true };
+    repartirItems(Math.min(30, 10 + Math.floor(J.ronda / 2)), false);
+    sonar(S.rondaFin, 1);
+    anunciar(`¡Ronda ${J.ronda} superada! Más ${bonus} puntos. Descanso de 45 segundos, aparecieron cosas nuevas. La tienda está abierta, tenés ${J.plata} de plata. ${textoMision}`);
+  }
+  function crearZombi(tipo, cerca) {
+    const T = ZTIPOS[tipo], P = J.jug, r = J.ronda;
+    let pos = null;
+    if (cerca) pos = celdaLibreAleatoria((x, y) => Math.hypot(x - cerca.x, y - cerca.y) < 6 && Math.hypot(x - P.x, y - P.y) > 5);
+    if (!pos) pos = celdaLibreAleatoria((x, y, i) => {
+      const d = Math.hypot(x - P.x, y - P.y);
+      return d > 16 && d < 34 && J.campo[i] >= 0;
+    });
+    if (!pos) pos = celdaLibreAleatoria((x, y) => Math.hypot(x - P.x, y - P.y) > 10);
+    if (!pos) return;
+    if (tipo === 'jefe') setTimeout(() => J && sonar3D(pos.x, pos.y, S.jefeAparece, { vol: 1.6, maxD: 90 }), 50);
+    const fP = J.practica ? .6 : 1;
+    const fV = 1 + .08 * (r - 1) + .15 * (J.jugadores - 1), fS = Math.min(1.6, 1 + .04 * (r - 1));
+    J.zombis.push({
+      id: J.sigId++, tipo, x: pos.x, y: pos.y, vida: T.vida * fV, vidaMax: T.vida * fV, vel: T.vel * fS * fP * rnd(.9, 1.1),
+      grT: rnd(.3, 2) + (tipo === 'jefe' ? 3 : 0), pasoT: rnd(0, 1), lentoT: 0, atkT: 0, estado: 'camina', trepaT: 0, rascaT: 0, gritoT: rnd(3, 6), empT: 0, evx: 0, evy: 0
+    });
+  }
+
+  // ================= Utilidades de dirección =================
+  function relativo(x, y) {
+    const P = J.jug;
+    return normAng(Math.atan2(x - P.x, -(y - P.y)) - P.ang);
+  }
+  function lado(rel) {
+    const g = grados(rel);
+    if (Math.abs(g) <= 22.5) return 'adelante';
+    if (Math.abs(g) >= 157.5) return 'atrás';
+    if (g > 0) return g < 67.5 ? 'adelante a la derecha' : g < 112.5 ? 'a la derecha' : 'atrás a la derecha';
+    return g > -67.5 ? 'adelante a la izquierda' : g > -112.5 ? 'a la izquierda' : 'atrás a la izquierda';
+  }
+  const metros = d => { const m = Math.max(1, Math.round(d)); return m === 1 ? '1 metro' : `${m} metros`; };
+  const PUNTOS_CARD = ['norte', 'noreste', 'este', 'sudeste', 'sur', 'sudoeste', 'oeste', 'noroeste'];
+  function rumbo(ang) { return PUNTOS_CARD[Math.round(((ang % TAU) + TAU) % TAU / (TAU / 8)) % 8]; }
+
+  // ================= Armas =================
+  function desgastar(obj, cuanto, nombreArt, alRomper) {
+    obj.dur = Math.max(0, obj.dur - cuanto);
+    for (const u of [20, 5]) if (obj.dur <= u && !obj.avisos[u]) {
+      obj.avisos[u] = true;
+      if (obj.dur > 0) { sonar(S.gastada, .8); anunciar(`${cap(nombreArt)} está al ${Math.ceil(obj.dur)} por ciento.`); }
+    }
+    if (obj.dur <= 0) { sonar(S.rotura, .9); alRomper(); }
+  }
+  const cap = s => s.charAt(0).toUpperCase() + s.slice(1);
+  function tolerancia(A, d) {
+    const gen = Math.max(1, 1.35 - .05 * (J.ronda - 1));
+    return Math.max(A.tol * gen, grados(Math.atan(.35 / Math.max(d, .5)))) * ZONAS[J.jug.zona].tol;
+  }
+  // Zombis en la mira, ordenados por precisión
+  function enLaMira(A) {
+    const P = J.jug, lista = [];
+    for (const z of J.zombis) {
+      const d = Math.hypot(z.x - P.x, z.y - P.y);
+      if (d > A.rango) continue;
+      if (!P.arbol && !visible(P.x, P.y, z.x, z.y)) continue;
+      if (P.arbol && !visible(P.x, P.y, z.x, z.y, false)) continue;
+      const tol = tolerancia(A, d);
+      const ey = Math.abs(grados(relativo(z.x, z.y)));
+      lista.push({ z, d, ey, tol, okY: ey <= tol, err: ey / tol });
+    }
+    return lista.sort((a, b) => a.err - b.err);
+  }
+  function armaParaMira() {
+    const P = J.jug;
+    return P.actual ? ARMAS[P.actual] : null;
+  }
+  function disparar() {
+    const P = J.jug;
+    if (P.trepando > 0 || P.bajando > 0) return;
+    const id = P.actual;
+    if (!id) { if (P.cadT <= 0) { sonar(S.nada); anunciar('No tenés armas de fuego.'); P.cadT = .8; } return; }
+    const A = ARMAS[id], W = P.armas[id];
+    if (P.recargando > 0 || P.cadT > 0) return;
+    if (W.carg <= 0) {
+      sonar(SA(id, 'empty')); P.cadT = .35;
+      if (P.mun[A.mun] > 0) recargar(); else anunciar(`Sin balas para ${A.art}.`);
+      return;
+    }
+    W.carg--; P.cadT = A.cad;
+    sonar(SA(id, 'fire'), .9);
+    const cand = enLaMira(A).filter(c => c.okY);
+    { const r0 = cand.length ? null : rayo(P.x, P.y, P.ang, A.rango); fx('disparo', { arma: id, explota: !!A.explota, blancos: cand.slice(0, A.perd || 1).map(c => ({ z: c.z, d: c.d })), dist: r0 ? r0.d : A.rango, pared: !!r0 }); }
+    if (!cand.length) {
+      J.racha = 0;
+      registrar({ tipo: 'fallo' });
+      const r = rayo(P.x, P.y, P.ang, A.rango);
+      const dist = r ? r.d : A.rango;
+      const px = P.x + Math.sin(P.ang) * dist, py = P.y - Math.cos(P.ang) * dist;
+      if (A.explota) setTimeout(() => J && explotar({ x: px, y: py }), dist * 25);
+      else if (r) setTimeout(() => J && sonar3D(px, py, SA(id, 'wall'), { vol: .9 }), r.d * 8);
+    } else {
+      if (A.explota) {
+        const c = cand[0];
+        setTimeout(() => J && explotar({ x: c.z.x, y: c.z.y }), c.d * 25);
+      } else {
+        const blancos = A.perd ? cand.slice(0, A.perd) : [cand[0]];
+        for (const c of blancos) {
+          const Zn = ZONAS[P.zona];
+          const dmg = A.dmg * (A.cerca ? (1 - .5 * c.d / A.rango) : 1) * Zn.dmg;
+          if (P.zona === 2) c.z.lentoT = 3;
+          dañar(c.z, dmg, P.zona === 0, false, A.imp);
+        }
+      }
+    }
+    desgastar(W, A.desg, A.art, () => {
+      if (W.rep && W.rep.length) {
+        W.dur = W.rep.shift(); W.avisos = {};
+        sonar(SA(id, 'draw'), .9);
+        anunciar(`¡Se rompió ${A.art}! Sacaste la de repuesto, al ${Math.ceil(W.dur)} por ciento. Te quedan ${W.rep.length} de repuesto.`);
+        return;
+      }
+      delete P.armas[id];
+      const otra = ORDEN_ARMAS.find(a => P.armas[a]);
+      P.actual = otra || null;
+      anunciar(`¡Se rompió ${A.art}!` + (otra ? ` Ahora tenés ${ARMAS[otra].art}.` : ' No te quedan armas de fuego.'));
+    });
+    if (P.armas[id] && W.carg === 0 && P.mun[A.mun] > 0) setTimeout(() => { if (J && J.jug.actual === id) recargar(); }, 250);
+    actualizarHud();
+  }
+  function recargar() {
+    const P = J.jug, id = P.actual;
+    if (!id || P.recargando > 0) return;
+    const A = ARMAS[id], W = P.armas[id];
+    if (W.carg >= A.carg) { anunciar('El cargador está lleno.'); return; }
+    if (P.mun[A.mun] <= 0) { sonar(S.nada); anunciar(`No tenés ${MUN[A.mun].nombre}.`); return; }
+    P.recargando = A.rec;
+    sonar(SA(id, 'reloading'), .9);
+  }
+  function terminarRecarga() {
+    const P = J.jug, id = P.actual;
+    if (!id) return;
+    const A = ARMAS[id], W = P.armas[id];
+    const n = Math.min(A.carg - W.carg, P.mun[A.mun]);
+    W.carg += n; P.mun[A.mun] -= n;
+    sonar(SA(id, 'reloaded'), .9);
+    actualizarHud();
+  }
+  function cambiarArma(id) {
+    const P = J.jug;
+    if (!P.armas[id]) { sonar(S.nada); anunciar(`No tenés ${ARMAS[id].art}.`); return; }
+    if (P.actual === id) { decirArma(); return; }
+    P.actual = id; P.recargando = 0; P.cadT = .4;
+    sonar(SA(id, 'draw'), .8);
+    const W = P.armas[id], A = ARMAS[id];
+    anunciar(`${A.nombre}. ${W.carg} en el cargador, ${P.mun[A.mun]} de reserva.`);
+    actualizarHud();
+  }
+  function ciclarBlanca() {
+    const P = J.jug;
+    if (!P.blancasRep.length) { sonar(S.nada); anunciar(P.blanca ? `Solo tenés ${BLANCAS[P.blanca.tipo].art}.` : 'No tenés armas blancas.'); return; }
+    if (P.blanca) P.blancasRep.push(P.blanca);
+    P.blanca = P.blancasRep.shift();
+    sonar(SR(`${BLANCA_SND[P.blanca.tipo]}.draw`, { dur: 1 }, S.cambio), .8);
+    if (P.blanca.tipo === 'motosierra') setTimeout(() => sonar(SR('motosierra.prende', {}, S.nada), .9), 300);
+    anunciar(`${BLANCAS[P.blanca.tipo].nombre} al ${Math.ceil(P.blanca.dur)} por ciento.`);
+  }
+  function ciclarArma(paso) {
+    const P = J.jug, mias = ORDEN_ARMAS.filter(a => P.armas[a]);
+    if (!mias.length) { sonar(S.nada); anunciar('No tenés armas de fuego.'); return; }
+    const i = mias.indexOf(P.actual);
+    const sig = mias[((i < 0 ? 0 : i + paso) % mias.length + mias.length) % mias.length];
+    if (sig === P.actual) { decirArma(); return; }
+    cambiarArma(sig);
+  }
+  function golpear() {
+    const P = J.jug;
+    if (P.blancaT > 0 || P.trepando > 0 || P.bajando > 0) return;
+    const B = P.blanca ? BLANCAS[P.blanca.tipo] : PUÑOS;
+    P.blancaT = B.cad;
+    let objetivo = null;
+    if (P.agarrado) objetivo = P.agarrado;
+    else {
+      let mejor = 99;
+      for (const z of J.zombis) {
+        const d = Math.hypot(z.x - P.x, z.y - P.y);
+        const alcance = P.arbol ? (z.estado === 'arriba' || z.estado === 'trepa' ? 2 : 0) : 1.8;
+        if (d > alcance) continue;
+        const rel = Math.abs(grados(relativo(z.x, z.y)));
+        if (rel > 55 && d > 1) continue;
+        if (d < mejor) { mejor = d; objetivo = z; }
+      }
+    }
+    const tipo = P.blanca ? P.blanca.tipo : 'puños';
+    sonar(swingBlanca(tipo), .8);
+    fx('golpe', { tipo, z: objetivo });
+    if (!objetivo) return;
+    setTimeout(() => J && sonar3D(objetivo.x, objetivo.y, golpeZombi(objetivo, tipo), { vol: 1 }), 80);
+    const soltar = P.agarrado === objetivo;
+    if (soltar) { P.agarrado = null; P.agarreT = 0; objetivo.atkT = 1.6; }
+    // empujón
+    const d = Math.max(.1, Math.hypot(objetivo.x - P.x, objetivo.y - P.y));
+    const emp = B.emp + (soltar ? .8 : 0);
+    objetivo.evx = (objetivo.x - P.x) / d * emp * 3; objetivo.evy = (objetivo.y - P.y) / d * emp * 3; objetivo.empT = .33;
+    let dmg = B.dmg;
+    if (objetivo.estado === 'trepa' || objetivo.estado === 'arriba') { objetivo.estado = 'camina'; objetivo.trepaT = 0; dmg += 20; objetivo.empT = .5; }
+    dañar(objetivo, dmg, false, true, null);
+    if (P.blanca) desgastar(P.blanca, BLANCAS[P.blanca.tipo].desg, BLANCAS[P.blanca.tipo].art, () => {
+      const art = BLANCAS[P.blanca.tipo].art;
+      if (P.blancasRep.length) {
+        P.blancasRep.sort((a, b) => b.dur - a.dur);
+        P.blanca = P.blancasRep.shift();
+        anunciar(`¡Se rompió ${art}! Sacaste ${BLANCAS[P.blanca.tipo].art}, al ${Math.ceil(P.blanca.dur)} por ciento.`);
+        return;
+      }
+      P.blanca = null;
+      anunciar(`¡Se rompió ${art}! Ahora peleás con las manos.`);
+    });
+    actualizarHud();
+  }
+  function tirarGranada() {
+    const P = J.jug;
+    if (P.granadas <= 0) { sonar(S.nada); anunciar('No tenés granadas.'); return; }
+    if (P.trepando > 0 || P.bajando > 0) return;
+    P.granadas--;
+    const alcance = P.arbol ? 8 : 11;
+    const r = rayo(P.x, P.y, P.ang, alcance);
+    const dist = r ? Math.max(.5, r.d - .4) : alcance;
+    const gx = P.x + Math.sin(P.ang) * dist, gy = P.y - Math.cos(P.ang) * dist;
+    sonar(S.granadaTirar, .8);
+    J.granadas.push({ x: gx, y: gy, t: 2.2, cayo: false, ticT: 0 });
+    anunciar(`Granada. Te quedan ${P.granadas}.`);
+    actualizarHud();
+  }
+  function explotar(gr) {
+    sonar3D(gr.x, gr.y, S.explosion, { vol: 1.4, maxD: 80 });
+    fx('explosion', { x: gr.x, y: gr.y });
+    for (const z of [...J.zombis]) {
+      const d = Math.hypot(z.x - gr.x, z.y - gr.y);
+      if (d < 4.5 && visible(gr.x, gr.y, z.x, z.y, false)) dañar(z, 160 * (1 - d / 4.5) + 40, false, false, 'explosion');
+    }
+    const P = J.jug, d = Math.hypot(P.x - gr.x, P.y - gr.y);
+    if (d < 3.5 && !P.arbol) herir(35 * (1 - d / 3.5) + 5, '¡La granada te lastimó!');
+  }
+  function usarBotiquin() {
+    const P = J.jug;
+    if (P.botiquines <= 0) { sonar(S.nada); anunciar('No tenés botiquines.'); return; }
+    if (P.vida >= 100) { anunciar('Tenés la vida completa.'); return; }
+    P.botiquines--; P.vida = Math.min(100, P.vida + 40);
+    sonar(S.curar, .9);
+    anunciar(`Vida ${Math.round(P.vida)}. Te quedan ${P.botiquines} botiquines.`);
+    actualizarHud();
+  }
+
+  // ================= Caja de suministros =================
+  function tirarCaja() {
+    const P = J.jug;
+    const c = celdaLibreAleatoria((x, y, i) => { const d = Math.hypot(x - P.x, y - P.y); return d > 8 && d < 25 && J.campo[i] >= 0; });
+    if (!c) return;
+    crearItem('caja', null, c.x, c.y);
+    sonar3D(c.x, c.y, S.cajaCae, { vol: 1.6, maxD: 60 });
+    anunciar(`¡Cayó una caja de suministros, ${lado(relativo(c.x, c.y))}! C para ir.`);
+  }
+
+  // ================= Misiones =================
+  const BASICAS = [
+    r => { const n = 3 + Math.floor(r / 3); return { texto: `matá ${n} zombis con tiros a la cabeza`, meta: n, cuenta: e => e.cabeza }; },
+    r => { const n = 2 + Math.floor(r / 4); return { texto: `matá ${n} zombis con arma blanca`, meta: n, cuenta: e => e.melee }; },
+    r => { const n = 3 + Math.floor(r / 3); return { texto: `matá ${n} zombis con tiros a las piernas`, meta: n, cuenta: e => e.piernas }; },
+    r => { const n = 2 + Math.floor(r / 5); return { texto: `matá ${n} zombis con explosiones`, meta: n, cuenta: e => e.explosion }; },
+    r => ({ texto: 'terminá la ronda sin que te lastimen', meta: 1, sinDaño: true }),
+    r => { const n = 4 + Math.floor(r / 3); return { texto: `matá ${n} zombis con la pistola`, meta: n, cuenta: e => e.arma === 'pistola' }; }
+  ];
+  const DIFICILES = [
+    () => ({ texto: 'matá 15 zombis con arma blanca', meta: 15, cuenta: e => e.melee, rondas: 3 }),
+    () => ({ texto: 'matá 10 zombis seguidos con tiros a la cabeza, sin errar ningún tiro', meta: 10, cuenta: e => e.cabeza, seguidos: true, rondas: 3 }),
+    () => ({ texto: 'terminá 2 rondas seguidas sin que te lastimen', meta: 2, sinDaño: true, rondas: 2 }),
+    () => ({ texto: 'matá 20 zombis en menos de 2 minutos', meta: 20, cuenta: () => true, limite: 120 }),
+    () => ({ texto: 'matá 8 zombis con tiros a las piernas y 8 con tiros a la cabeza', meta: 16, doble: { piernas: 0, cabeza: 0 }, rondas: 3 })
+  ];
+  function nuevasMisiones() {
+    const r = J.ronda, partes = [];
+    J.mision = { ...elegir(BASICAS)(r), prog: 0, premio: 100 + 20 * r };
+    partes.push(`Misión: ${J.mision.texto}. Premio ${J.mision.premio} de plata.`);
+    if (!J.misionDificil && r >= J.proxDificil) {
+      J.misionDificil = { ...elegir(DIFICILES)(), prog: 0, premio: 500 + 50 * r, desde: r };
+      J.proxDificil = r + rndi(3, 6);
+      sonar(S.misionDificil, .9);
+      partes.push(`¡Misión difícil: ${J.misionDificil.texto}! Mientras dure, los puntos y la plata valen el doble.`);
+    }
+    return partes.join(' ');
+  }
+  function completar(M, dificil) {
+    const pts = M.premio;
+    J.plata += pts; if (dificil) J.puntos += pts;
+    sonar(S.misionOk, 1);
+    if (dificil) J.misionDificil = null; else J.mision = null;
+    return dificil ? `¡Misión difícil cumplida! Más ${pts} puntos y ${pts} de plata. Se termina el doble.` : `¡Misión cumplida! Más ${pts} de plata.`;
+  }
+  function fallarDificil(motivo) {
+    J.misionDificil = null;
+    sonar(S.menuError, .8);
+    anunciar(`Misión difícil fallada. ${motivo}`);
+  }
+  // devuelve el texto a decir (en fin de ronda) o lo anuncia
+  function registrar(e) {
+    if (!J || J.practica) return '';
+    const textos = [];
+    for (const [M, dificil] of [[J.mision, false], [J.misionDificil, true]]) {
+      if (!M) continue;
+      if (e.tipo === 'muerte' && M.cuenta) {
+        if (M.cuenta(e)) { M.prog++; if (M.prog < M.meta && (M.prog % (dificil ? 2 : 1) === 0 || M.meta - M.prog <= 2)) anunciar(`Misión: ${M.prog} de ${M.meta}.`); }
+        else if (M.seguidos && M.prog > 0) { M.prog = 0; anunciar('Misión: se cortó la seguidilla, volvé a empezar.'); }
+      }
+      if (e.tipo === 'muerte' && M.doble) {
+        if (e.piernas && M.doble.piernas < 8) { M.doble.piernas++; M.prog++; }
+        if (e.cabeza && M.doble.cabeza < 8) { M.doble.cabeza++; M.prog++; }
+      }
+      if (e.tipo === 'fallo' && M.seguidos && M.prog > 0) { M.prog = 0; anunciar('Misión: erraste, la seguidilla vuelve a cero.'); }
+      if (e.tipo === 'daño' && M.sinDaño && !M.lastimado) {
+        M.lastimado = true;
+        if (dificil) { fallarDificil('Te lastimaron.'); continue; }
+        anunciar('Misión fallada: te lastimaron.');
+      }
+      if (e.tipo === 'finRonda') {
+        if (M.sinDaño && !M.lastimado) { M.prog++; }
+        if (M.sinDaño) M.lastimado = false;
+      }
+      if (M.prog >= M.meta && (dificil ? J.misionDificil === M : J.mision === M)) {
+        const t = completar(M, dificil);
+        if (e.tipo === 'finRonda') textos.push(t); else anunciar(t);
+        continue;
+      }
+      if (e.tipo === 'finRonda') {
+        if (!dificil) { textos.push(J.mision && !J.mision.lastimado && J.mision.prog < J.mision.meta ? 'La misión de la ronda no se cumplió.' : ''); J.mision = null; }
+        else if (M.rondas && J.ronda - M.desde + 1 >= M.rondas) { J.misionDificil = null; textos.push('Se terminó el tiempo de la misión difícil.'); }
+      }
+    }
+    return textos.filter(Boolean).join(' ');
+  }
+  function decirMisiones() {
+    const t = [];
+    if (J.mision) t.push(`Misión: ${J.mision.texto}, ${J.mision.prog} de ${J.mision.meta}.`);
+    if (J.misionDificil) t.push(`Misión difícil: ${J.misionDificil.texto}, ${J.misionDificil.prog} de ${J.misionDificil.meta}${J.misionDificil.limite ? `, quedan ${Math.ceil(J.misionDificil.limite)} segundos` : ''}. Puntos y plata al doble.`);
+    return t.join(' ') || 'Sin misiones ahora.';
+  }
+
+  // ================= Daño =================
+  function dañar(z, dmg, cabeza, cuerpo, clase) {
+    z.vida -= dmg;
+    if (clase) sonar3D(z.x, z.y, impactoZombi(z, clase), { vol: .9 });
+    fx('impacto', { z, clase, cabeza, cuerpo });
+    if (z.vida > 0) return;
+    const T = ZTIPOS[z.tipo];
+    fx('muerte', { z, cabeza, clase });
+    J.zombis = J.zombis.filter(o => o !== z);
+    if (J.jug.agarrado === z) { J.jug.agarrado = null; J.jug.agarreT = 0; }
+    if (J.lock === z.id) J.lock = null;
+    let pts = T.pts * (cabeza ? 1.5 : 1) + (cuerpo ? 5 : 0);
+    pts = Math.round(pts * (1 + .1 * (J.jugadores - 1)) * (J.misionDificil ? 2 : 1));
+    J.puntos += pts; J.plata += pts; J.muertes++;
+    registrar({ tipo: 'muerte', cabeza, melee: cuerpo, explosion: clase === 'explosion', piernas: !cuerpo && clase !== 'explosion' && J.jug.zona === 2, arma: cuerpo ? null : J.jug.actual });
+    J.racha++;
+    if (J.racha > 0 && J.racha % 5 === 0) {
+      const b = 25 * (J.racha / 5) * (J.misionDificil ? 2 : 1);
+      J.puntos += b; J.plata += b;
+      sonar(S.racha, .9);
+      anunciar(`¡Racha de ${J.racha}! Más ${b} puntos.`);
+    }
+    setTimeout(() => J && sonar3D(z.x, z.y, muerteZombi(z), { vol: 1 }), 250);
+    // a veces dejan cosas
+    const P = J.jug;
+    if (z.tipo === 'jefe') {
+      crearItem('botiquin', null, z.x, z.y);
+      crearItem('balas', elegir(['e', 'f5', 'f7', 'b']), z.x + .3, z.y);
+      crearItem('granada', null, z.x, z.y + .3);
+    } else if (Math.random() < .28) {
+      const mias = ORDEN_ARMAS.filter(a => P.armas[a]).map(a => ARMAS[a].mun);
+      crearItem('balas', mias.length ? elegir(mias) : 'p', z.x, z.y);
+    }
+    actualizarHud();
+  }
+  function herir(n, texto) {
+    const P = J.jug;
+    if (J.practica) { sonar(S.dolor, .6); return; }
+    registrar({ tipo: 'daño' });
+    if (P.chaleco > 0) {
+      const a = Math.min(P.chaleco, n / 2);
+      P.chaleco -= a; n -= a;
+      if (P.chaleco <= 0) { P.chaleco = 0; anunciar('¡Se rompió el chaleco!'); }
+    }
+    P.vida -= n;
+    fx('herido', { n });
+    sonar(S.dolor, 1);
+    if (texto) anunciar(texto);
+    if (P.vida <= 0) { P.vida = 0; terminarPartida(); }
+    actualizarHud();
+  }
+
+  // ================= Objetos =================
+  function describirItem(it) {
+    const P = J.jug;
+    if (it.tipo === 'balas') return `${it.cant} ${MUN[it.sub].nombre}`;
+    if (it.tipo === 'botiquin') return 'Botiquín';
+    if (it.tipo === 'granada') return 'Granada';
+    if (it.tipo === 'caja') return 'Caja de suministros';
+    if (it.tipo === 'arma') return `${ARMAS[it.sub].nombre} al ${Math.ceil(it.dur)} por ciento`;
+    if (it.tipo === 'blanca') {
+      let t = `${BLANCAS[it.sub].nombre} al ${Math.ceil(it.dur)} por ciento`;
+      return t;
+    }
+    return '';
+  }
+  function itemCercano(r = 1) {
+    const P = J.jug; let mejor = null, md = r;
+    for (const it of J.items) { const d = Math.hypot(it.x - P.x, it.y - P.y); if (d <= md) { md = d; mejor = it; } }
+    return mejor;
+  }
+  function juntar(it) {
+    const P = J.jug;
+    const sj = sonidoJuntar(it);
+    const antes = J.items.length;
+    const quitar = () => { J.items = J.items.filter(o => o !== it); };
+    if (it.tipo === 'balas') {
+      const M = MUN[it.sub], antes = P.mun[it.sub];
+      if (antes >= M.max) { anunciar(`Ya tenés el máximo de ${M.nombre}.`); return; }
+      const n = Math.min(it.cant, M.max - antes);
+      P.mun[it.sub] += n; it.cant -= n;
+      if (it.cant <= 0) quitar();
+      anunciar(`Juntaste ${n} ${M.nombre}. Tenés ${P.mun[it.sub]}.`);
+    } else if (it.tipo === 'botiquin') {
+      if (P.botiquines >= 3) { anunciar('Ya tenés 3 botiquines, no entran más.'); return; }
+      P.botiquines++; quitar();
+      anunciar(`Botiquín. Tenés ${P.botiquines}. Se usa con la Q.`);
+    } else if (it.tipo === 'caja') {
+      quitar();
+      const lst = [];
+      const mias = ORDEN_ARMAS.filter(a => P.armas[a]).map(a => ARMAS[a].mun);
+      const suma = {};
+      for (let k = 0; k < 3; k++) { const m = mias.length ? elegir(mias) : 'p'; suma[m] = (suma[m] || 0) + MUN[m].paquete * 2; }
+      for (const [m, n] of Object.entries(suma)) { P.mun[m] = Math.min(MUN[m].max, P.mun[m] + n); lst.push(`${n} ${MUN[m].nombre}`); }
+      if (P.botiquines < 3) { P.botiquines++; lst.push('un botiquín'); }
+      if (P.granadas < 5) { P.granadas++; lst.push('una granada'); }
+      if (Math.random() < .35) { const id = elegir(ORDEN_ARMAS); const A = ARMAS[id]; if (P.armas[id]) { P.armas[id].rep.push(100); lst.push(`${A.art} de repuesto`); } else { P.armas[id] = { dur: 100, carg: A.carg, avisos: {}, rep: [] }; lst.push(`${A.art}, tecla ${A.tecla}`); } }
+      anunciar('Caja de suministros: ' + lst.join(', ') + '.');
+    } else if (it.tipo === 'granada') {
+      if (P.granadas >= 5) { anunciar('Ya tenés 5 granadas, no entran más.'); return; }
+      P.granadas++; quitar();
+      anunciar(`Granada. Tenés ${P.granadas}.`);
+    } else if (it.tipo === 'arma') {
+      const A = ARMAS[it.sub], W = P.armas[it.sub];
+      if (!W) {
+        P.armas[it.sub] = { dur: it.dur, carg: A.carg, avisos: {}, rep: [] };
+        quitar();
+        anunciar(`Agarraste ${A.art} al ${Math.ceil(it.dur)} por ciento, con el cargador lleno. Tecla ${A.tecla}. ${P.mun[A.mun]} ${MUN[A.mun].nombre} de reserva.`);
+      } else {
+        const M = MUN[A.mun];
+        P.mun[A.mun] = Math.min(M.max, P.mun[A.mun] + A.carg);
+        W.rep = W.rep || [];
+        W.rep.push(it.dur); W.rep.sort((a, b) => b - a);
+        quitar();
+        anunciar(`${A.nombre} de repuesto al ${Math.ceil(it.dur)} por ciento. Tenés ${W.rep.length} de repuesto, y ${P.mun[A.mun]} ${M.nombre}.`);
+      }
+    } else if (it.tipo === 'blanca') {
+      const nueva = { tipo: it.sub, dur: it.dur, avisos: {} };
+      quitar();
+      if (P.blanca) {
+        P.blancasRep.push(nueva);
+        anunciar(`${BLANCAS[it.sub].nombre} de repuesto al ${Math.ceil(it.dur)} por ciento. Tenés ${P.blancasRep.length} armas blancas de repuesto. Shift y F para cambiar.`);
+      } else {
+        P.blanca = nueva;
+        if (it.sub === 'motosierra') setTimeout(() => sonar(SR('motosierra.prende', {}, S.nada), .9), 400);
+        anunciar(`Agarraste ${BLANCAS[it.sub].art} al ${Math.ceil(it.dur)} por ciento.`);
+      }
+    }
+    if (J.items.length !== antes || it.tipo === 'blanca' || it.tipo === 'balas') sonar(sj, .9);
+    actualizarHud();
+  }
+  function accionE() {
+    const P = J.jug;
+    if (P.trepando > 0 || P.bajando > 0) return;
+    if (P.arbol) { P.bajando = 1; sonar(S.bajar, .8); return; }
+    const it = itemCercano(1.1);
+    if (it) { juntar(it); return; }
+    if (J.mapa.casa && accionPuerta()) return;
+    const a = arbolCercano(1.5);
+    if (a) {
+      if (P.agarrado) { anunciar('¡No podés subir, te tienen agarrado!'); return; }
+      P.trepando = 1.5; P.arbolNuevo = a; sonar(S.trepar, .8); return;
+    }
+    sonar(S.nada);
+    anunciar('No hay nada acá.');
+  }
+  // ---- Barricadas ----
+  function puertaParaTrabar() {
+    const P = J.jug, m = J.mapa;
+    const aqui = Math.floor(P.y) * m.W + Math.floor(P.x);
+    let mejor = null, md = 1.6;
+    for (let y = Math.floor(P.y) - 2; y <= Math.floor(P.y) + 2; y++) for (let x = Math.floor(P.x) - 2; x <= Math.floor(P.x) + 2; x++) {
+      const i = y * m.W + x, c = m.g[i];
+      if ((c !== PUERTA && c !== BARRICADA) || i === aqui) continue;
+      const d = Math.hypot(x + .5 - P.x, y + .5 - P.y);
+      if (d < md) { md = d; mejor = { i, x: x + .5, y: y + .5 }; }
+    }
+    return mejor;
+  }
+  function accionPuerta() {
+    const P = J.jug, m = J.mapa;
+    if (m.g[Math.floor(P.y) * m.W + Math.floor(P.x)] === PUERTA) { anunciar('Estás parado en la puerta. Salí un paso para trabarla.'); return true; }
+    const p = puertaParaTrabar();
+    if (!p) return false;
+    const B = J.barricadas.get(p.i);
+    let accion, tiempo;
+    if (!B) { accion = 'trabar'; tiempo = 2; }
+    else if (B.vida < 100) { accion = 'arreglar'; tiempo = 1.5; }
+    else { accion = 'sacar'; tiempo = 1; }
+    P.construyendo = { t: tiempo, i: p.i, x: p.x, y: p.y, accion, golpeT: 0 };
+    anunciar(accion === 'trabar' ? 'Trabando la puerta...' : accion === 'arreglar' ? 'Arreglando la barricada...' : 'Sacando la barricada...');
+    return true;
+  }
+  function terminarConstruccion() {
+    const P = J.jug, C = P.construyendo, m = J.mapa;
+    P.construyendo = null;
+    if (C.accion === 'trabar') {
+      m.g[C.i] = BARRICADA;
+      J.barricadas.set(C.i, { i: C.i, x: C.x, y: C.y, vida: 100, avisos: {} });
+      anunciar('Puerta trabada. Los zombis la van a tener que romper. E de nuevo para arreglarla o sacarla.');
+    } else if (C.accion === 'arreglar') {
+      const B = J.barricadas.get(C.i); if (B) { B.vida = 100; B.avisos = {}; }
+      anunciar('Barricada arreglada.');
+    } else {
+      m.g[C.i] = PUERTA; J.barricadas.delete(C.i);
+      anunciar('Sacaste la barricada. La puerta está abierta.');
+    }
+    calcularCampo();
+  }
+  function golpearBarricada(B, dmg) {
+    B.vida -= dmg * .6;
+    sonar3D(B.x, B.y, S.barricadaGolpe, { vol: 1.3 });
+    for (const u of [50, 25]) if (B.vida <= u && B.vida > 0 && !B.avisos[u]) {
+      B.avisos[u] = true;
+      anunciar(`¡La barricada ${lado(relativo(B.x, B.y))} está al ${u} por ciento!`);
+    }
+    if (B.vida <= 0) {
+      J.mapa.g[B.i] = PUERTA; J.barricadas.delete(B.i);
+      sonar3D(B.x, B.y, S.barricadaRota, { vol: 1.5 });
+      anunciar(`¡Rompieron la barricada ${lado(relativo(B.x, B.y))}!`);
+      calcularCampo();
+    }
+  }
+  function arbolCercano(max) {
+    const P = J.jug, m = J.mapa; let mejor = null, md = max;
+    for (let y = Math.floor(P.y - max - 1); y <= P.y + max + 1; y++) for (let x = Math.floor(P.x - max - 1); x <= P.x + max + 1; x++) {
+      if (celda(x, y) !== ARBOL) continue;
+      const d = Math.hypot(x + .5 - P.x, y + .5 - P.y);
+      if (d < md) { md = d; mejor = { x: x + .5, y: y + .5, d }; }
+    }
+    return mejor;
+  }
+  function puertaCercana(max, conVista) {
+    const P = J.jug; let mejor = null, md = max;
+    for (let y = Math.floor(P.y - max - 1); y <= P.y + max + 1; y++) for (let x = Math.floor(P.x - max - 1); x <= P.x + max + 1; x++) {
+      if (celda(x, y) !== PUERTA) continue;
+      const d = Math.hypot(x + .5 - P.x, y + .5 - P.y);
+      if (d < md && (!conVista || visible(P.x, P.y, x + .5, y + .5))) { md = d; mejor = { x: x + .5, y: y + .5, d }; }
+    }
+    return mejor;
+  }
+
+  // ================= Tienda de puntos =================
+  const PRECIO_MUN = { p: 40, rv: 50, e: 60, f5: 80, f7: 90, b: 150, g: 200, fl: 60 };
+  const PRECIO_ARMA = { pistola: 200, revolver: 400, escopeta: 500, doble: 600, subfusil: 600, fusil: 900, ametralladora: 1300, rifle: 800, francotirador: 1500, lanzagranadas: 1400, ballesta: 700 };
+  const PRECIO_BLANCA = { cuchillo: 100, golf: 150, martillo: 200, bate: 200, machete: 250, hacha: 300, espada: 400, motosierra: 600 };
+  function catalogo() {
+    const P = J.jug, cats = [];
+    const balas = [];
+    const actualMun = P.actual ? ARMAS[P.actual].mun : null;
+    const tipos = Object.keys(MUN).sort((a, b) => (b === actualMun) - (a === actualMun));
+    for (const m of tipos) balas.push({ nombre: `${MUN[m].paquete} ${MUN[m].nombre}` + (m === actualMun ? ', para el arma que tenés en la mano' : ''), precio: PRECIO_MUN[m],
+      comprar: () => { if (P.mun[m] >= MUN[m].max) return `Ya tenés el máximo de ${MUN[m].nombre}.`; P.mun[m] = Math.min(MUN[m].max, P.mun[m] + MUN[m].paquete); return `Compraste ${MUN[m].nombre}. Tenés ${P.mun[m]}.`; } });
+    cats.push({ nombre: 'Balas', items: balas });
+    cats.push({ nombre: 'Curación y protección', items: [
+      { nombre: 'Botiquín', precio: 150, comprar: () => { if (P.botiquines >= 3) return 'Ya tenés 3 botiquines.'; P.botiquines++; return `Compraste un botiquín. Tenés ${P.botiquines}.`; } },
+      { nombre: 'Granada', precio: 120, comprar: () => { if (P.granadas >= 5) return 'Ya tenés 5 granadas.'; P.granadas++; return `Compraste una granada. Tenés ${P.granadas}.`; } },
+      { nombre: 'Chaleco antibalas: recibís la mitad del daño hasta que se gaste', precio: 400, snd: 'chaleco', comprar: () => { if (P.chaleco >= 100) return 'Ya tenés el chaleco entero.'; P.chaleco = 100; return 'Te pusiste el chaleco antibalas.'; } },
+      { nombre: 'Curarte toda la vida ahora', precio: 250, comprar: () => { if (P.vida >= 100) return 'Ya tenés la vida completa.'; P.vida = 100; return 'Vida completa.'; } }
+    ] });
+    const rep = [];
+    if (P.actual) { const W = P.armas[P.actual], A = ARMAS[P.actual]; const pr = Math.max(20, Math.ceil((100 - W.dur) * 3)); rep.push({ nombre: `Arreglar ${A.art}, que está al ${Math.ceil(W.dur)} por ciento`, precio: pr, comprar: () => { if (W.dur >= 99.5) return `${cap(A.art)} ya está nueva.`; W.dur = 100; W.avisos = {}; return `${cap(A.art)} quedó como nueva.`; } }); }
+    if (P.blanca) { const B = BLANCAS[P.blanca.tipo], b = P.blanca; const pr = Math.max(20, Math.ceil((100 - b.dur) * 2)); rep.push({ nombre: `Arreglar ${B.art}, que está al ${Math.ceil(b.dur)} por ciento`, precio: pr, comprar: () => { if (b.dur >= 99.5) return `${cap(B.art)} ya está nueva.`; b.dur = 100; b.avisos = {}; return `${cap(B.art)} quedó como nueva.`; } }); }
+    if (rep.length) cats.push({ nombre: 'Arreglar armas', items: rep });
+    cats.push({ nombre: 'Armas de fuego', items: ORDEN_ARMAS.map(id => ({ nombre: ARMAS[id].nombre + (P.armas[id] ? ', queda de repuesto' : ''), precio: PRECIO_ARMA[id], comprar: () => {
+      const A = ARMAS[id];
+      if (P.armas[id]) { P.armas[id].rep.push(100); return `Compraste ${A.art} de repuesto.`; }
+      P.armas[id] = { dur: 100, carg: A.carg, avisos: {}, rep: [] };
+      return `Compraste ${A.art}. Tecla ${A.tecla}.`; } })) });
+    cats.push({ nombre: 'Armas blancas', items: Object.keys(BLANCAS).map(t => ({ nombre: BLANCAS[t].nombre, precio: PRECIO_BLANCA[t], comprar: () => {
+      const nueva = { tipo: t, dur: 100, avisos: {} };
+      if (P.blanca) { P.blancasRep.push(nueva); return `Compraste ${BLANCAS[t].art}, queda de repuesto. Shift y F para cambiar.`; }
+      P.blanca = nueva; return `Compraste ${BLANCAS[t].art}.`; } })) });
+    return cats;
+  }
+  function abrirTienda() {
+    if (J.fase === 'ronda') { sonar(S.menuError); anunciar('La tienda está cerrada durante la ronda. Abre en el descanso.'); return; }
+    for (const k in teclas) teclas[k] = false;
+    J.tiendaAbierta = { c: 0, i: 0 };
+    sonar(S.menuAbrir, .8);
+    anunciar(`Tienda. Tenés ${J.plata} de plata. Flechas arriba y abajo para elegir, izquierda y derecha para cambiar de sección, Enter para comprar, P o Escape para salir.`);
+    setTimeout(() => J && J.tiendaAbierta && decirProducto(true), 2600);
+  }
+  function decirProducto(conSeccion) {
+    const T = J.tiendaAbierta, cats = catalogo();
+    T.c = (T.c + cats.length) % cats.length;
+    const it = cats[T.c].items;
+    T.i = (T.i + it.length) % it.length;
+    const p = it[T.i];
+    anunciar(`${conSeccion ? cats[T.c].nombre + '. ' : ''}${p.nombre}: ${p.precio} de plata.${p.precio > J.plata ? ' No te alcanza.' : ''} ${T.i + 1} de ${it.length}.`);
+  }
+  function teclaTienda(e) {
+    const T = J.tiendaAbierta;
+    switch (e.code) {
+      case 'ArrowDown': T.i++; sonar(S.menuMover); decirProducto(false); break;
+      case 'ArrowUp': T.i--; sonar(S.menuMover); decirProducto(false); break;
+      case 'ArrowRight': T.c++; T.i = 0; sonar(S.menuMover); decirProducto(true); break;
+      case 'ArrowLeft': T.c--; T.i = 0; sonar(S.menuMover); decirProducto(true); break;
+      case 'Enter': case 'Space': {
+        const p = catalogo()[T.c].items[T.i];
+        if (p.precio > J.plata) { sonar(S.menuError); anunciar(`No te alcanza. Cuesta ${p.precio} y tenés ${J.plata}.`); break; }
+        const antes = JSON.stringify([J.jug.mun, J.jug.botiquines, J.jug.granadas, J.jug.chaleco, J.jug.vida, Object.keys(J.jug.armas).length, J.jug.blancasRep.length]);
+        const msg = p.comprar();
+        const r = Object.values(J.jug.armas).map(w => w.dur + ':' + (w.rep || []).length).join() + (J.jug.blanca ? J.jug.blanca.dur : '');
+        const cambio = antes !== JSON.stringify([J.jug.mun, J.jug.botiquines, J.jug.granadas, J.jug.chaleco, J.jug.vida, Object.keys(J.jug.armas).length, J.jug.blancasRep.length]) || r !== T.ultimoR;
+        T.ultimoR = r;
+        if (!/^Ya |ya está nueva/.test(msg)) { J.plata -= p.precio; sonar(p.snd === 'chaleco' ? S.chaleco : S.compra, .9); anunciar(`${msg} Te quedan ${J.plata} de plata.`); }
+        else { sonar(S.menuError); anunciar(msg); }
+        void cambio;
+        actualizarHud();
+        break;
+      }
+      case 'Escape': case 'KeyP': cerrarTienda(); break;
+      case 'KeyH': decirVida(); break;
+      case 'KeyB': decirArma(); break;
+      case 'KeyN': decirRonda(); break;
+    }
+  }
+  function cerrarTienda() {
+    J.tiendaAbierta = null;
+    sonar(S.menuCerrar, .8);
+    anunciar(`Saliste de la tienda. Te quedan ${J.plata} de plata.`);
+  }
+  function teclaP() {
+    const P = J.jug;
+    if (Math.hypot(J.tienda.x - P.x, J.tienda.y - P.y) < 2) { abrirTienda(); return; }
+    iniciarGuia('tienda');
+  }
+
+  // ================= Zombi más peligroso =================
+  const PELIGRO = { comun: 1, corredor: 3, tanque: 2, griton: 8, trepador: 2, jefe: 4 };
+  function mirarPeligroso() {
+    const P = J.jug;
+    let mejor = null, max = 0;
+    for (const z of J.zombis) {
+      const d = Math.hypot(z.x - P.x, z.y - P.y);
+      if (d > 30) continue;
+      let p = PELIGRO[z.tipo] * (P.arbol && z.tipo === 'trepador' ? 3 : 1);
+      if (z === P.agarrado) p *= 10;
+      if (d < 4) p *= 2;
+      const v = p / Math.max(d, 1);
+      if (v > max) { max = v; mejor = { z, d }; }
+    }
+    if (!mejor) { sonar(S.nada); anunciar(J.zombis.length ? 'No hay zombis cerca.' : 'No hay zombis.'); return; }
+    P.ang = normAng(Math.atan2(mejor.z.x - P.x, -(mejor.z.y - P.y)));
+    J.lock = null; J.lockT = 0;
+    sonar(S.brujula, 1);
+    anunciar(`${cap(ZTIPOS[mejor.z.tipo].nombre)}, ${metros(mejor.d)}.`);
+  }
+
+  // ================= Información hablada =================
+  function decirVida() { const P = J.jug; anunciar(`Vida ${Math.round(P.vida)}. Botiquines ${P.botiquines}.` + (P.chaleco > 0 ? ` Chaleco al ${Math.ceil(P.chaleco)} por ciento.` : '')); }
+  function decirArma() {
+    const P = J.jug; const partes = [];
+    const rep = W => W.rep && W.rep.length ? `, ${W.rep.length} de repuesto` : '';
+    if (P.actual) { const A = ARMAS[P.actual], W = P.armas[P.actual]; partes.push(`${A.nombre}: ${W.carg} en el cargador, ${P.mun[A.mun]} de reserva, al ${Math.ceil(W.dur)} por ciento${rep(W)}.`); }
+    else partes.push('Sin arma de fuego.');
+    const otras = ORDEN_ARMAS.filter(a => P.armas[a] && a !== P.actual).map(a => `${ARMAS[a].nombre} ${P.mun[ARMAS[a].mun] + P.armas[a].carg} balas${rep(P.armas[a])}`);
+    if (otras.length) partes.push('También tenés: ' + otras.join(', ') + '.');
+    partes.push(P.blanca ? `${BLANCAS[P.blanca.tipo].nombre} al ${Math.ceil(P.blanca.dur)} por ciento.` : 'Sin arma blanca.');
+    if (P.blancasRep.length) partes.push('Armas blancas de repuesto: ' + P.blancasRep.map(b => `${BLANCAS[b.tipo].nombre} ${Math.ceil(b.dur)}`).join(', ') + '.');
+    partes.push(`Granadas ${P.granadas}.`);
+    anunciar(partes.join(' '));
+  }
+  function decirRonda() {
+    if (J.fase === 'recoleccion') anunciar(`Faltan ${Math.ceil(J.faseT)} segundos para la primera ronda. Puntos ${J.puntos}. Plata ${J.plata}.`);
+    else if (J.fase === 'descanso') anunciar(`Descanso. Faltan ${Math.ceil(J.faseT)} segundos para la ronda ${J.ronda + 1}. Puntos ${J.puntos}. Plata ${J.plata}.`);
+    else anunciar(`Ronda ${J.ronda}. Faltan ${J.zombis.length + J.porSalir.length} zombis. Puntos ${J.puntos}. Plata ${J.plata}. ${decirMisiones()}`);
+  }
+  function decirRadar() {
+    const P = J.jug;
+    const cerca = J.zombis.map(z => ({ z, d: Math.hypot(z.x - P.x, z.y - P.y) })).filter(o => o.d < 30).sort((a, b) => a.d - b.d);
+    if (!cerca.length) { anunciar(J.zombis.length ? `No hay zombis cerca. Hay ${J.zombis.length} lejos.` : 'No hay zombis.'); return; }
+    const z = cerca[0];
+    let t = `${cerca.length === 1 ? 'Un zombi cerca' : cerca.length + ' zombis cerca'}. El más cercano: ${ZTIPOS[z.z.tipo].nombre}, ${metros(z.d)}, ${lado(relativo(z.z.x, z.z.y))}.`;
+    if (cerca[1]) t += ` Después: ${ZTIPOS[cerca[1].z.tipo].nombre}, ${metros(cerca[1].d)}, ${lado(relativo(cerca[1].z.x, cerca[1].z.y))}.`;
+    anunciar(t);
+  }
+  // ================= Guía hacia puertas y árboles =================
+  function objetivosGuia(tipo) {
+    const m = J.mapa, c = J.campo, out = [];
+    if (tipo === 'tienda') {
+      const i = Math.floor(J.tienda.y) * m.W + Math.floor(J.tienda.x);
+      return c[i] >= 0 ? [{ x: J.tienda.x, y: J.tienda.y, d: c[i], i }] : [];
+    }
+    if (tipo === 'cosa') {
+      for (const it of J.items) {
+        const i = Math.floor(it.y) * m.W + Math.floor(it.x);
+        if (c[i] >= 0) out.push({ x: it.x, y: it.y, d: c[i], i, item: it });
+      }
+      return out.sort((a, b) => a.d - b.d);
+    }
+    for (let i = 0; i < m.W * m.H; i++) {
+      if (m.casa && m.g[i] === PUERTA && c[i] >= 0) out.push({ x: i % m.W + .5, y: ((i / m.W) | 0) + .5, d: c[i], i });
+      if (!m.casa && m.g[i] === ARBOL) {
+        let mejor = -1;
+        for (const n of [i - 1, i + 1, i - m.W, i + m.W]) if (c[n] >= 0 && (mejor < 0 || c[n] < c[mejor])) mejor = n;
+        if (mejor >= 0) out.push({ x: i % m.W + .5, y: ((i / m.W) | 0) + .5, d: c[mejor], i: mejor });
+      }
+    }
+    return out.sort((a, b) => a.d - b.d);
+  }
+  function puntoGuia() {
+    const m = J.mapa, c = J.campo, P = J.jug;
+    let i = J.guia.i;
+    if (c[i] < 0) return null;
+    const camino = [i];
+    while (c[i] > 0 && camino.length < 2000) {
+      let sig = -1;
+      for (const n of [i - 1, i + 1, i - m.W, i + m.W]) if (c[n] === c[i] - 1) { sig = n; break; }
+      if (sig < 0) break;
+      i = sig; camino.push(i);
+    }
+    for (const k of camino) {
+      const x = k % m.W + .5, y = ((k / m.W) | 0) + .5;
+      if (visible(P.x, P.y, x, y)) return { x, y, final: k === J.guia.i };
+    }
+    return { x: P.x, y: P.y, final: false };
+  }
+  function iniciarGuia(tipo = 'lugar') {
+    const P = J.jug;
+    if (P.arbol) { anunciar('Estás arriba de un árbol. E para bajar.'); return; }
+    calcularCampo();
+    const l = objetivosGuia(tipo).slice(0, tipo === 'cosa' ? 8 : 5);
+    const cosa = tipo === 'tienda' ? 'el camino a la tienda' : tipo === 'cosa' ? 'ninguna cosa' : J.mapa.casa ? 'ninguna puerta' : 'ningún árbol';
+    if (!l.length) { anunciar(`No encontré ${cosa} adonde ir.`); return; }
+    const idx = J.guia && J.guia.tipo === tipo ? (J.guia.idx + 1) % l.length : 0;
+    J.guia = { ...l[idx], idx, tipo, beepT: 0 };
+    const wp = puntoGuia() || l[idx];
+    const nom = tipo === 'tienda' ? 'Tienda' : tipo === 'cosa' ? describirItem(l[idx].item).split('.')[0] : J.mapa.casa ? 'Puerta' : 'Árbol';
+    const tecla = tipo === 'cosa' ? 'C' : 'X';
+    if (tipo === 'tienda') anunciar(`Tienda: ${metros(l[idx].d)} caminando, ${lado(relativo(wp.x, wp.y))}. Seguí la música. G para mirar hacia ahí, borrar para cancelar.`);
+    else anunciar(`${nom}, ${idx + 1} de ${l.length}: ${metros(l[idx].d)} caminando, ${lado(relativo(wp.x, wp.y))}. ${tecla} para otra, G para mirar hacia ahí, borrar para cancelar.`);
+  }
+  function girarGuia() {
+    if (!J.guia) { anunciar('No hay guía. Apretá X.'); return; }
+    const wp = puntoGuia();
+    if (!wp) return;
+    const P = J.jug;
+    P.ang = normAng(Math.atan2(wp.x - P.x, -(wp.y - P.y)));
+    sonar(S.brujula, 1);
+    anunciar('Mirando hacia la guía.');
+  }
+  function actualizarGuia(dt) {
+    const G = J.guia, P = J.jug;
+    if (!G || P.arbol) return;
+    if (G.tipo === 'cosa' || G.tipo === 'tienda') {
+      if (G.tipo === 'tienda' && Math.hypot(G.x - P.x, G.y - P.y) < 1.6) {
+        J.guia = null;
+        anunciar(J.fase === 'ronda' ? 'Llegaste a la tienda. Está cerrada durante la ronda, abre en el descanso.' : 'Llegaste a la tienda. P para abrirla.');
+        return;
+      }
+      if (G.tipo === 'cosa' && (!J.items.includes(G.item) || Math.hypot(G.x - P.x, G.y - P.y) < .9)) { J.guia = null; return; }
+      G.beepT -= dt;
+      if (G.beepT > 0) return;
+      G.beepT = .5;
+      const wp = puntoGuia();
+      if (!wp) { J.guia = null; anunciar('Se perdió el camino. Apretá C otra vez.'); return; }
+      const deFrente = Math.abs(grados(relativo(wp.x, wp.y))) < 12;
+      sonar3D(wp.x, wp.y, S.guia, { vol: 1.5, extra: deFrente ? 1.5 : 1 });
+      return;
+    }
+    const llegada = J.mapa.casa ? Math.hypot(G.x - P.x, G.y - P.y) < .8 : Math.hypot(G.x - P.x, G.y - P.y) < 1.5;
+    if (llegada) {
+      J.guia = null;
+      anunciar(J.mapa.casa ? 'Estás en la puerta.' : 'Llegaste al árbol. E para subir.');
+      sonar(J.mapa.casa ? S.radarPuerta : S.radarArbol, 1, 1);
+      return;
+    }
+    G.beepT -= dt;
+    if (G.beepT > 0) return;
+    G.beepT = .5;
+    const wp = puntoGuia();
+    if (!wp) { J.guia = null; anunciar('Se perdió el camino. Apretá X otra vez.'); return; }
+    const deFrente = Math.abs(grados(relativo(wp.x, wp.y))) < 12;
+    if (wp.final && J.mapa.casa) sonar3D(G.x, G.y, S.radarPuerta, { vol: 1.6 });
+    sonar3D(wp.x, wp.y, S.guia, { vol: 1.5, extra: deFrente ? 1.5 : 1 });
+  }
+
+  function decirCosas() {
+    const P = J.jug;
+    const l = J.items.map(it => ({ it, d: Math.hypot(it.x - P.x, it.y - P.y) })).filter(o => o.d < 15).sort((a, b) => a.d - b.d).slice(0, 4);
+    if (!l.length) { anunciar('No hay cosas cerca.'); return; }
+    anunciar(l.map(o => `${describirItem(o.it).split('.')[0]}, ${o.d < 1.1 ? 'acá' : metros(o.d) + ' ' + lado(relativo(o.it.x, o.it.y))}`).join('. ') + '.');
+  }
+  function decirRumbo() {
+    const P = J.jug;
+    let t = `Mirando al ${rumbo(P.ang)}. Apuntás a ${ZONAS[P.zona].nombre.toLowerCase()}.`;
+    if (P.arbol) t += ' Estás arriba de un árbol.';
+    anunciar(t);
+  }
+
+  // ================= Bucle principal =================
+  const teclas = {};
+  function actualizar(dt) {
+    if (!J || J.pausa || J.fase === 'fin') return;
+    J.tiempo += dt;
+    const P = J.jug;
+    // fases
+    if (J.fase === 'recoleccion' || J.fase === 'descanso') {
+      J.faseT -= dt;
+      const s = Math.ceil(J.faseT);
+      const marcas = [30, 10];
+      for (const m of marcas) if (s <= m && !J.avisosFase[m]) { J.avisosFase[m] = true; anunciar(`${m} segundos.`); }
+      for (const m of [3, 2, 1]) if (s <= m && !J.avisosFase[m]) { J.avisosFase[m] = true; sonar(S.cuenta, .8); }
+      if (J.faseT <= 0) empezarRonda();
+    } else if (J.fase === 'ronda') {
+      J.salidaT -= dt;
+      const maxVivos = 6 + J.ronda + 2 * (J.jugadores - 1);
+      if (J.porSalir.length && J.salidaT <= 0 && J.zombis.length < maxVivos) {
+        crearZombi(J.porSalir.shift());
+        J.salidaT = rnd(.8, 2) / (1 + .3 * (J.jugadores - 1));
+      }
+      if (!J.porSalir.length && !J.zombis.length) terminarRonda();
+      else if (J.ronda >= 2) { J.cajaT -= dt; if (J.cajaT <= 0) { J.cajaT = rnd(60, 100); tirarCaja(); } }
+      if (J.misionDificil && J.misionDificil.limite) { J.misionDificil.limite -= dt; if (J.misionDificil.limite <= 0) fallarDificil('Se acabó el tiempo.'); }
+    }
+    // timers del jugador
+    P.cadT -= dt; P.blancaT -= dt;
+    if (P.recargando > 0) { P.recargando -= dt; if (P.recargando <= 0) { P.recargando = 0; terminarRecarga(); } }
+    if (P.trepando > 0) {
+      P.trepando -= dt;
+      if (P.trepando <= 0) { P.trepando = 0; P.arbol = P.arbolNuevo; anunciar('Arriba del árbol. Los zombis comunes no te alcanzan.'); }
+    }
+    if (P.bajando > 0) {
+      P.bajando -= dt;
+      if (P.bajando <= 0) { P.bajando = 0; P.arbol = null; anunciar('Abajo.'); }
+    }
+    // giro
+    const giro = (teclas.ArrowRight ? 1 : 0) - (teclas.ArrowLeft ? 1 : 0);
+    if (giro) {
+      P.ang = normAng(P.ang + giro * 2.6 * dt);
+      const oct = Math.round(((P.ang % TAU) + TAU) % TAU / (TAU / 8)) % 8;
+      if (oct !== P.ultimoOctante) { P.ultimoOctante = oct; sonar(oct === 0 ? S.brujulaNorte : S.brujula, 1); }
+    }
+    // caminar
+    if (P.construyendo) {
+      const C = P.construyendo;
+      C.t -= dt; C.golpeT -= dt;
+      if (C.golpeT <= 0) { C.golpeT = .45; sonar3D(C.x, C.y, S.martillazo, { vol: 1 }); }
+      if (P.agarrado) { P.construyendo = null; anunciar('¡Te interrumpieron!'); }
+      else if (C.t <= 0) terminarConstruccion();
+    }
+    const puedeMover = !P.arbol && !P.construyendo && P.trepando <= 0 && P.bajando <= 0 && !P.agarrado && P.vida > 0;
+    const av = (teclas.KeyW ? 1 : 0) - (teclas.KeyS ? 1 : 0);
+    const la = (teclas.KeyD ? 1 : 0) - (teclas.KeyA ? 1 : 0);
+    if (puedeMover && (av || la)) {
+      const sueloAhora = J.mapa.suelo[Math.floor(P.y) * J.mapa.W + Math.floor(P.x)];
+      let vel = (teclas.ShiftLeft || teclas.ShiftRight ? 4.8 : 3) * (av < 0 && !la ? .7 : 1) * (sueloAhora === 'agua' ? .7 : 1);
+      const sx = Math.sin(P.ang), sy = -Math.cos(P.ang);
+      let mx = (sx * av + Math.cos(P.ang) * la), my = (sy * av + Math.sin(P.ang) * la);
+      const n = Math.hypot(mx, my) || 1; mx = mx / n * vel * dt; my = my / n * vel * dt;
+      let movio = 0;
+      if (libre(P.x + mx, P.y)) { P.x += mx; movio += Math.abs(mx); }
+      if (libre(P.x, P.y + my)) { P.y += my; movio += Math.abs(my); }
+      if (movio < Math.hypot(mx, my) * .5) {
+        J.choqueT -= dt;
+        if (J.choqueT <= 0) { J.choqueT = .45; sonar(S.choque, .8); }
+      } else J.choqueT = 0;
+      P.distPaso += movio;
+      if (P.distPaso > .75) { P.distPaso = 0; sonar(S.paso[J.mapa.suelo[Math.floor(P.y) * J.mapa.W + Math.floor(P.x)]] || S.paso.pasto, .7); }
+      const c = Math.floor(P.y) * J.mapa.W + Math.floor(P.x);
+      if (c !== J.campoCelda) calcularCampo();
+    }
+    // disparo automático
+    if (teclas.Space && P.actual && ARMAS[P.actual].auto) disparar();
+    // agarre
+    if (P.agarrado && !J.zombis.includes(P.agarrado)) P.agarrado = null;
+    if (P.agarrado) {
+      P.agarreT -= dt; P.alarmaT -= dt;
+      if (P.alarmaT <= 0) { P.alarmaT = .3; sonar3D(P.agarrado.x, P.agarrado.y, S.agarre, { vol: 2 }); }
+      if (P.agarreT <= 0) {
+        const z = P.agarrado;
+        P.agarrado = null;
+        z.atkT = 1.4;
+        const d = Math.max(.1, Math.hypot(z.x - P.x, z.y - P.y));
+        z.evx = (z.x - P.x) / d * 1.5; z.evy = (z.y - P.y) / d * 1.5; z.empT = .3;
+        if (z.estado === 'arriba') { z.estado = 'camina'; z.trepaT = 0; }
+        sonar3D(z.x, z.y, ataqueZombi(z), { vol: 1.2 });
+        herir(ZTIPOS[z.tipo].dmg, null);
+      }
+    }
+    // zombis
+    actualizarZombis(dt);
+    // granadas
+    for (const gr of [...J.granadas]) {
+      gr.t -= dt; gr.ticT -= dt;
+      if (!gr.cayo && gr.t < 1.6) { gr.cayo = true; sonar3D(gr.x, gr.y, S.granadaCae, { vol: 1.2 }); }
+      if (gr.cayo && gr.ticT <= 0) { gr.ticT = .3; sonar3D(gr.x, gr.y, S.granadaTic, { vol: 1.3 }); }
+      if (gr.t <= 0) { J.granadas = J.granadas.filter(o => o !== gr); explotar(gr); }
+    }
+    if (J.fase === 'fin') return;
+    // mira
+    actualizarMira(dt);
+    actualizarGuia(dt);
+    // sonido al pasar por una puerta
+    const celdaAhora = celda(P.x, P.y);
+    if (celdaAhora === PUERTA && J.ultimaCelda !== PUERTA) sonar(S.radarPuerta, .6);
+    J.ultimaCelda = celdaAhora;
+    // objetos: sonidos y aviso al pisarlos
+    const cercanos = J.items.map(it => ({ it, d: Math.hypot(it.x - P.x, it.y - P.y) })).filter(o => o.d < 14).sort((a, b) => a.d - b.d).slice(0, 4);
+    for (const { it } of cercanos) {
+      it.beaconT -= dt;
+      if (it.beaconT <= 0) { it.beaconT = rnd(1.8, 2.6); sonar3D(it.x, it.y, sonidoItem(it), { vol: 1.4, maxD: 14 }); }
+    }
+    const pisado = itemCercano(1);
+    if (pisado && pisado !== J.itemAviso) {
+      J.itemAviso = pisado;
+      juntar(pisado);
+    }
+    if (!pisado) J.itemAviso = null;
+    // radar
+    if (OP.radar && !P.arbol) actualizarRadar(dt);
+    // música de la tienda
+    J.tiendaT -= dt;
+    if (J.tiendaT <= 0) { J.tiendaT = 2.2; sonar3D(J.tienda.x, J.tienda.y, S.tiendaMusica, { vol: J.fase === 'ronda' ? .6 : 1.3, maxD: 45 }); }
+    // latido
+    if (P.vida < 30) { J.latidoT -= dt; if (J.latidoT <= 0) { J.latidoT = 2.1; sonar(S.latido, .9); } }
+    // ambiente
+    J.ambT -= dt;
+    if (J.ambT <= 0) { J.ambT = rnd(2.5, 7); eventoAmbiente(); }
+  }
+
+  function actualizarZombis(dt) {
+    const P = J.jug;
+    J.campoT -= dt;
+    if (J.campoT <= 0) { J.campoT = .5; calcularCampo(); }
+    const m = J.mapa;
+    const ordenados = J.zombis.map(z => ({ z, d: Math.hypot(z.x - P.x, z.y - P.y) })).sort((a, b) => a.d - b.d);
+    const conSonido = new Set(ordenados.slice(0, 8).map(o => o.z));
+    let masCerca = 99, zCerca = null;
+    for (const { z, d } of ordenados) {
+      const T = ZTIPOS[z.tipo];
+      z.atkT -= dt;
+      if (d < masCerca && z !== P.agarrado) { masCerca = d; zCerca = z; }
+      // sonidos
+      if (conSonido.has(z)) {
+        z.grT -= dt;
+        if (z.grT <= 0) { z.grT = rnd(T.gr[0], T.gr[1]) * (P.arbol ? .7 : 1); sonar3D(z.x, z.y, S.zombi[z.tipo], { vol: 1 }); }
+      }
+      // empujón
+      if (z.empT > 0) {
+        z.empT -= dt;
+        const nx = z.x + z.evx * dt, ny = z.y + z.evy * dt;
+        if (libre(nx, z.y, .3)) z.x = nx;
+        if (libre(z.x, ny, .3)) z.y = ny;
+        continue;
+      }
+      if (P.agarrado === z) continue;
+      // gritón
+      if (z.tipo === 'griton') {
+        z.gritoT -= dt;
+        if (z.gritoT <= 0 && d < 22) {
+          z.gritoT = rnd(9, 13);
+          sonar3D(z.x, z.y, S.grito, { vol: 1.5, maxD: 50 });
+          if (J.zombis.length < 40) { crearZombi('comun', z); crearZombi('comun', z); }
+        }
+      }
+      // trepador en el árbol
+      if (P.arbol && z.tipo === 'trepador' && d < 1.6) {
+        if (z.estado === 'camina') z.estado = 'trepa';
+        if (z.estado === 'trepa') {
+          z.trepaT += dt; z.rascaT -= dt;
+          if (z.rascaT <= 0) { z.rascaT = .4; sonar3D(z.x, z.y, S.rascar, { vol: 1.3 }); }
+          if (z.trepaT >= 3) { z.estado = 'arriba'; sonar3D(z.x, z.y, S.devorar, { vol: 1.2 }); agarrar(z); }
+        }
+        continue;
+      }
+      if (z.estado !== 'camina' && !P.arbol) { z.estado = 'camina'; z.trepaT = 0; }
+      // ataque
+      if (!P.arbol && P.trepando <= 0 && d < .9) {
+        if (z.atkT <= 0) {
+          if (!P.agarrado) agarrar(z);
+          else { z.atkT = 1.5; sonar3D(z.x, z.y, ataqueZombi(z), { vol: .9 }); herir(T.dmg * .5, null); }
+        }
+        continue;
+      }
+      if (P.arbol && d < 1.1) continue;
+      // moverse
+      let tx = P.x, ty = P.y;
+      const ci = Math.floor(z.y) * m.W + Math.floor(z.x);
+      let F = J.campo;
+      if (J.campo[ci] < 0 && J.campoB) {
+        // no puede llegar al jugador: va a romper la barricada más cercana
+        let bar = null, bd = 1e9;
+        for (const B of J.barricadas.values()) { const q = Math.hypot(B.x - z.x, B.y - z.y); if (q < bd) { bd = q; bar = B; } }
+        if (bar && bd < 1.3) {
+          z.golpeT = (z.golpeT || 0) - dt;
+          if (z.golpeT <= 0) { z.golpeT = 1; golpearBarricada(bar, T.dmg); }
+          continue;
+        }
+        F = J.campoB;
+        if (bar) { tx = bar.x; ty = bar.y; }
+      }
+      if (!(F === J.campo && d < 5 && visible(z.x, z.y, P.x, P.y)) && F[ci] > 0) {
+        const cx = ci % m.W, cy = (ci / m.W) | 0;
+        let mejor = F[ci], bx = null, by = null;
+        for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [1, -1], [-1, 1], [-1, -1]]) {
+          const nx = cx + dx, ny = cy + dy, n = ny * m.W + nx;
+          if (F[n] < 0 || F[n] >= mejor) continue;
+          if (dx && dy && (bloquea(m.g[cy * m.W + nx]) || bloquea(m.g[ny * m.W + cx]))) continue;
+          mejor = F[n]; bx = nx + .5; by = ny + .5;
+        }
+        if (bx != null) { tx = bx; ty = by; }
+      }
+      const dd = Math.hypot(tx - z.x, ty - z.y) || 1;
+      if (z.lentoT > 0) z.lentoT -= dt;
+      const vz = z.vel * (z.lentoT > 0 ? .5 : 1);
+      let vx = (tx - z.x) / dd * vz * dt, vy = (ty - z.y) / dd * vz * dt;
+      // separarse de otros zombis
+      for (const o of J.zombis) {
+        if (o === z) continue;
+        const ox = z.x - o.x, oy = z.y - o.y, od = Math.hypot(ox, oy);
+        if (od > 0 && od < .6) { vx += ox / od * .6 * dt; vy += oy / od * .6 * dt; }
+      }
+      if (libre(z.x + vx, z.y, .3)) z.x += vx;
+      if (libre(z.x, z.y + vy, .3)) z.y += vy;
+      if (conSonido.has(z)) {
+        z.pasoT -= dt;
+        if (z.pasoT <= 0) { z.pasoT = (z.tipo === 'jefe' ? 1.5 : T.paso) / Math.min(1.6, z.vel / T.vel); sonar3D(z.x, z.y, S.zpaso[z.tipo], { vol: .9, maxD: 22, extra: J.mapa.suelo[Math.floor(z.y) * J.mapa.W + Math.floor(z.x)] }); }
+      }
+    }
+    // aviso fuerte cuando uno está por tocarte
+    if (zCerca && !P.arbol && (masCerca < 2.2 || (masCerca < 3.5 && Math.cos(relativo(zCerca.x, zCerca.y)) < 0))) {
+      J.peligroT -= dt;
+      if (J.peligroT <= 0) { J.peligroT = .5; sonar3D(zCerca.x, zCerca.y, S.peligro, { vol: 2 }); }
+    }
+  }
+  function agarrar(z) {
+    const P = J.jug;
+    P.agarrado = z;
+    sonar3D(z.x, z.y, ataqueZombi(z), { vol: 1.3 });
+    P.agarreT = Math.max(.9, 1.4 - .03 * (J.ronda - 1));
+    P.alarmaT = 0;
+    anunciar('¡Te agarró! F');
+  }
+
+  function actualizarMira(dt) {
+    const P = J.jug;
+    const A = armaParaMira();
+    if (!A || P.trepando > 0 || P.bajando > 0) { J.lock = null; return; }
+    const lista = enLaMira(A);
+    const ok = lista.find(c => c.okY);
+    J.lockT -= dt;
+    if (ok) {
+      if (J.lock !== ok.z.id || J.lockT <= 0) {
+        J.lock = ok.z.id; J.lockT = .42;
+        const cuantos = lista.filter(c => c.okY).length;
+        const n = cuantos >= 3 ? 5 : cuantos === 2 ? 4 : rndi(1, 3);
+        const tipo = ['center', 'body', 'graze'][P.zona];
+        sonar(SR(`apunta.${tipo}${n}`, { vol: 1.1 }, [S.miraCabeza, S.mira, S.miraPiernas][P.zona]), 1);
+      }
+      return;
+    }
+    J.lock = null;
+  }
+  function cambiarZona(paso) {
+    const P = J.jug;
+    const n = clamp(P.zona + paso, 0, 2);
+    if (n === P.zona) { sonar(S.nada); anunciar(ZONAS[n].nombre + '.'); return; }
+    P.zona = n; J.lock = null; J.lockT = 0;
+    sonar(S.zona[n], 1);
+    anunciar(ZONAS[n].nombre + '.');
+    actualizarHud();
+  }
+
+  function actualizarRadar(dt) {
+    const P = J.jug, R = J.radarT;
+    R.frente -= dt; R.izq -= dt; R.der -= dt; R.puerta -= dt;
+    const tipoSonido = c => c === ARBOL ? S.radarArbol : S.radarPared;
+    const f = rayo(P.x, P.y, P.ang, 3);
+    if (f && R.frente <= 0) {
+      const cerca = 1 - f.d / 3;
+      R.frente = .25 + f.d * .18;
+      sonar3D(P.x + Math.sin(P.ang) * f.d, P.y - Math.cos(P.ang) * f.d, tipoSonido(f.c), { vol: 1, extra: cerca });
+    }
+    for (const [k, da] of [['izq', -Math.PI / 2], ['der', Math.PI / 2]]) {
+      const r = rayo(P.x, P.y, P.ang + da, 1.2);
+      if (r && R[k] <= 0) {
+        R[k] = .8;
+        sonar3D(P.x + Math.sin(P.ang + da) * r.d, P.y - Math.cos(P.ang + da) * r.d, tipoSonido(r.c), { vol: .6, extra: 1 - r.d / 1.2 });
+      }
+    }
+    if (J.mapa.casa && R.puerta <= 0) {
+      const p = puertaCercana(7, true);
+      if (p && p.d > .6) { R.puerta = 1.2; sonar3D(p.x, p.y, S.radarPuerta, { vol: 1 }); }
+    }
+  }
+
+  // ================= Ambiente =================
+  let ambNodos = [];
+  function pararAmbiente() { for (const n of ambNodos) { try { n.stop(); } catch (e) {} } ambNodos = []; }
+  function loopRuido(tipo, f, q, vol, lfoF = 0, lfoV = 0) {
+    const s = ctx.createBufferSource(); s.buffer = ruidoBuf; s.loop = true;
+    const fl = ctx.createBiquadFilter(); fl.type = tipo; fl.frequency.value = f; fl.Q.value = q;
+    const g = ctx.createGain(); g.gain.value = vol;
+    s.connect(fl); fl.connect(g); g.connect(ambBus); s.start();
+    ambNodos.push(s);
+    if (lfoF) { const l = ctx.createOscillator(); l.frequency.value = lfoF; const lg = ctx.createGain(); lg.gain.value = lfoV; l.connect(lg); lg.connect(g.gain); l.start(); ambNodos.push(l); }
+  }
+  function loopBuf(nombre, vol, rate = 1) {
+    const b = BUF[nombre]; if (!b) return false;
+    const s = ctx.createBufferSource(); s.buffer = b; s.loop = true; s.playbackRate.value = rate;
+    const g = ctx.createGain(); g.gain.value = vol;
+    s.connect(g); g.connect(ambBus); s.start(ctx.currentTime, Math.random() * b.duration);
+    ambNodos.push(s);
+    return true;
+  }
+  function iniciarAmbiente() {
+    pararAmbiente();
+    const id = J.mapa.id;
+    const reales = { bosque: [['amb.bosque', 1.2], ['amb.viento', .5]], selva: [['amb.selva', 1.2], ['amb.arroyo', .6]], jungla: [['amb.jungla', 1.6], ['amb.pantano', .5]],
+      desierto: [['amb.desierto', 1.3]], casa: [['amb.reloj', .6], ['amb.heladera', .35]] }[id];
+    if (reales && reales.every(([n]) => BUF[n])) { for (const [n, v] of reales) loopBuf(n, v); J.ambReal = true; return; }
+    if (id === 'bosque') loopRuido('lowpass', 400, .5, .25, .1, .1);
+    if (id === 'selva') { loopRuido('lowpass', 500, .5, .15); loopRuido('bandpass', 4800, 8, .12, 23, .08); }
+    if (id === 'jungla') { loopRuido('lowpass', 450, .5, .15); loopRuido('bandpass', 5200, 9, .1, 31, .07); }
+    if (id === 'desierto') loopRuido('bandpass', 600, .7, .35, .07, .25);
+    if (id === 'casa') loopRuido('lowpass', 180, .5, .2);
+  }
+  function eventoAmbiente() {
+    if (J.ambReal) return;
+    const P = J.jug, id = J.mapa.id;
+    const a = rnd(0, TAU), r = rnd(8, 20), x = P.x + Math.sin(a) * r, y = P.y - Math.cos(a) * r;
+    const dest = (fn) => {
+      const rel = normAng(a - P.ang);
+      const g = ctx.createGain(); g.gain.value = .5; const p = ctx.createStereoPanner(); p.pan.value = Math.sin(rel) * .9;
+      g.connect(p); p.connect(ambBus); fn(g, ctx.currentTime + .01);
+      setTimeout(() => { g.disconnect(); p.disconnect(); }, 4000);
+    };
+    if (id === 'bosque' || id === 'selva' || id === 'jungla') {
+      const base = rnd(2200, 4200), n = rndi(2, 5);
+      dest((d, t) => { for (let i = 0; i < n; i++) osc(d, t + i * .13, { f: base, f2: base * rnd(1.2, 1.6), dur: .04, vol: .08, rel: .04 }); });
+    }
+    if (id === 'jungla' && Math.random() < .6) dest((d, t) => { for (let i = 0; i < 3; i++) osc(d, t + .8 + i * .18, { f: rnd(150, 230), f2: rnd(120, 180), dur: .05, vol: .15, rel: .05 }); });
+    if (id === 'desierto' && Math.random() < .3) dest((d, t) => osc(d, t, { f: rnd(1800, 2400), f2: 1500, dur: .4, vol: .04, a: .1, rel: .3 }));
+    if (id === 'casa') dest((d, t) => { const o = rnd(70, 120); osc(d, t, { tipo: 'sawtooth', f: o, f2: o * 1.3, dur: .4, vol: .02, a: .1, rel: .2 }); });
+    void x; void y;
+  }
+
+  // ================= Fin =================
+  function terminarPartida() {
+    if (J.fase === 'fin') return;
+    J.fase = 'fin';
+    pararAmbiente();
+    sonar(S.muerteJugador, 1);
+    const ronda = Math.max(0, J.ronda);
+    $('#resumen').textContent = `Te comieron los zombis. Llegaste a la ronda ${ronda}, mataste ${J.muertes} zombis y sumaste ${J.puntos} puntos.`;
+    $('#guardado').textContent = guardarEnTabla();
+    $('#fin').hidden = false;
+    setTimeout(() => $('#tFin').focus(), 50);
+    anunciar(($('#resumen').textContent + ' ' + $('#guardado').textContent).trim());
+  }
+  function leerTabla() { try { return JSON.parse(localStorage.getItem('zombis-tabla') || '[]'); } catch (e) { return []; } }
+  // ================= Cuenta y tabla =================
+  function leerCuenta() { try { return JSON.parse(localStorage.getItem('zombis-cuenta') || 'null'); } catch (e) { return null; } }
+  let CUENTA = leerCuenta();
+  function mostrarCuentaInfo() { $('#cuentaInfo').textContent = CUENTA ? `Cuenta: ${CUENTA.nombre}` : 'Todavía no creaste tu cuenta.'; }
+  function abrirCuenta() {
+    $('#cNombre').value = ''; $('#cEstado').textContent = '';
+    $('#cuentaPanel').hidden = false;
+    setTimeout(() => $('#tCuenta').focus(), 50);
+  }
+  function crearCuenta() {
+    if (leerCuenta()) { $('#cEstado').textContent = 'En este dispositivo ya hay una cuenta creada.'; return; }
+    const nombre = $('#cNombre').value.trim();
+    if (nombre.length < 2) { $('#cEstado').textContent = 'Escribí un nombre de al menos 2 letras.'; $('#cNombre').focus(); return; }
+    CUENTA = { id: Date.now().toString(36) + Math.random().toString(36).slice(2, 8), nombre, creada: new Date().toISOString() };
+    try { localStorage.setItem('zombis-cuenta', JSON.stringify(CUENTA)); } catch (e) {}
+    $('#cuentaPanel').hidden = true;
+    mostrarCuentaInfo();
+    anunciar(`Cuenta creada. Hola, ${nombre}.`);
+    mostrar('mapas'); document.querySelector('#mapas button').focus();
+  }
+  // La tabla guarda el mejor puntaje de cada cuenta (su posición en el ranking).
+  // Solo se avisa cuando superás tu récord.
+  function guardarEnTabla() {
+    if (!CUENTA) return '';
+    if (J.practica) return 'Fue una práctica: no cuenta para el ranking.';
+    let t = leerTabla();
+    // dejar un solo puntaje por cuenta (el mejor)
+    const mejores = {};
+    for (const x of t) if (!mejores[x.cuenta] || x.puntos > mejores[x.cuenta].puntos) mejores[x.cuenta] = x;
+    t = Object.values(mejores);
+    const mio = mejores[CUENTA.id];
+    if (mio && J.puntos <= mio.puntos) { guardarTabla(t); return ''; }
+    const e = { cuenta: CUENTA.id, nombre: CUENTA.nombre, puntos: J.puntos, ronda: J.ronda, mapa: J.mapa.nombre, fecha: new Date().toLocaleDateString('es-AR') };
+    t = t.filter(x => x.cuenta !== CUENTA.id); t.push(e);
+    t.sort((a, b) => b.puntos - a.puntos);
+    guardarTabla(t);
+    const lugar = t.indexOf(e) + 1;
+    return mio ? `¡Nuevo récord! Ahora estás en el puesto ${lugar} del ranking.` : `Entraste al ranking en el puesto ${lugar}.`;
+  }
+  function guardarTabla(t) { try { localStorage.setItem('zombis-tabla', JSON.stringify(t.slice(0, 100))); } catch (err) {} }
+  function mostrarTabla() {
+    const mej = {}; for (const x of leerTabla()) if (!mej[x.cuenta] || x.puntos > mej[x.cuenta].puntos) mej[x.cuenta] = x;
+    const t = Object.values(mej).sort((a, b) => b.puntos - a.puntos), ol = $('#listaTabla');
+    ol.innerHTML = '';
+    if (!t.length) { const li = document.createElement('li'); li.textContent = 'Todavía no hay puntajes.'; ol.appendChild(li); }
+    for (const e of t.slice(0, 10)) {
+      const li = document.createElement('li');
+      li.textContent = `Puesto ${t.indexOf(e) + 1}, ${e.nombre}: ${e.puntos} puntos, ronda ${e.ronda}, ${e.mapa}, ${e.fecha}.`;
+      if (CUENTA && e.cuenta === CUENTA.id) li.textContent += ' (vos)';
+      ol.appendChild(li);
+    }
+    $('#tabla').hidden = false;
+    setTimeout(() => $('#tTabla').focus(), 50);
+  }
+
+  // ================= Pantalla =================
+  function mostrar(id) {
+    for (const s of ['inicio', 'mapas', 'juego']) $('#' + s).hidden = s !== id;
+  }
+  function actualizarHud() {
+    if (!J) return;
+    const P = J.jug;
+    $('#hVida').textContent = Math.round(P.vida);
+    $('#hArma').textContent = P.actual ? `${ARMAS[P.actual].nombre} ${P.armas[P.actual].carg}/${P.mun[ARMAS[P.actual].mun]}` : 'Manos';
+    $('#hRonda').textContent = J.ronda || '-';
+    $('#hZona').textContent = ZONAS[P.zona].nombre;
+    $('#hPuntos').textContent = J.puntos;
+    $('#hPlata').textContent = J.plata;
+  }
+  function pausar() {
+    if (!J || J.fase === 'fin') return;
+    J.pausa = true;
+    if (ctx) ctx.suspend();
+    $('#pausa').hidden = false;
+    setTimeout(() => $('#tPausa').focus(), 50);
+  }
+  function seguir() {
+    $('#pausa').hidden = true; $('#ayuda').hidden = true;
+    if (!J) return;
+    J.pausa = false;
+    for (const k in teclas) teclas[k] = false;
+    if (ctx) ctx.resume();
+    $('#zonaJuego').focus();
+    anunciar('Seguimos.');
+  }
+  function salirAlMenu() {
+    pararAmbiente();
+    J = null;
+    for (const id of ['pausa', 'fin', 'ayuda']) $('#' + id).hidden = true;
+    if (ctx) ctx.resume();
+    mostrar('inicio');
+    $('#bJugar').focus();
+  }
+
+  // ================= Teclado =================
+  const TECLAS_JUEGO = new Set(['Minus', 'Comma', 'Period', 'Backspace', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space', 'PageUp', 'PageDown', 'Backquote', 'IntlBackslash']);
+  document.addEventListener('keydown', e => {
+    if (!J || J.fase === 'fin' || $('#juego').hidden) return;
+    if (J.pausa) return;
+    const k = e.code;
+    if (J.tiendaAbierta) { e.preventDefault(); if (!e.repeat || /Arrow/.test(k)) teclaTienda(e); return; }
+    if (TECLAS_JUEGO.has(k) || /^Key|^Digit/.test(k)) e.preventDefault();
+    const nueva = !teclas[k];
+    teclas[k] = true;
+    if (!nueva) return;
+    iniciarAudio();
+    switch (k) {
+      case 'Escape': pausar(); break;
+      case 'Space': if (!J.jug.actual || !ARMAS[J.jug.actual].auto) disparar(); break;
+      case 'KeyR': recargar(); break;
+      case 'KeyF': if (e.shiftKey) ciclarBlanca(); else golpear(); break;
+      case 'KeyE': accionE(); break;
+      case 'KeyQ': usarBotiquin(); break;
+      case 'Backquote': tirarGranada(); break;
+      case 'Digit1': cambiarArma('pistola'); break;
+      case 'Digit2': cambiarArma('revolver'); break;
+      case 'Digit3': cambiarArma('escopeta'); break;
+      case 'Digit4': cambiarArma('doble'); break;
+      case 'Digit5': cambiarArma('subfusil'); break;
+      case 'Digit6': cambiarArma('fusil'); break;
+      case 'Digit7': cambiarArma('ametralladora'); break;
+      case 'Digit8': cambiarArma('rifle'); break;
+      case 'Digit9': cambiarArma('francotirador'); break;
+      case 'Digit0': cambiarArma('lanzagranadas'); break;
+      case 'Minus': cambiarArma('ballesta'); break;
+      case 'Comma': case 'Period': ciclarArma(k === 'Period' ? 1 : -1); break;
+      case 'KeyH': decirVida(); break;
+      case 'KeyB': decirArma(); break;
+      case 'KeyN': decirRonda(); break;
+      case 'KeyZ': decirRadar(); break;
+      case 'KeyX': iniciarGuia('lugar'); break;
+      case 'KeyG': girarGuia(); break;
+      case 'Backspace': if (J.guia) { J.guia = null; anunciar('Guía cancelada.'); } break;
+      case 'KeyC': iniciarGuia('cosa'); break;
+      case 'KeyM': decirRumbo(); break;
+      case 'ArrowUp': case 'PageUp': cambiarZona(-1); break;
+      case 'ArrowDown': case 'PageDown': cambiarZona(1); break;
+      case 'KeyP': teclaP(); break;
+      case 'KeyV': mirarPeligroso(); break;
+      case 'KeyT': OP.radar = !OP.radar; guardarOp(); anunciar(OP.radar ? 'Radar prendido.' : 'Radar apagado.'); break;
+    }
+    // por si el teclado manda el símbolo y no la posición
+    if (k !== 'Backquote' && (e.key === '|' || e.key === '°' || e.key === '¬')) tirarGranada();
+  });
+  document.addEventListener('keyup', e => {
+    teclas[e.code] = false;
+  });
+  window.addEventListener('blur', () => { for (const k in teclas) teclas[k] = false; });
+
+  // Preparar el audio y los sonidos al abrir
+  try { iniciarAudio(); cargarSonidos(); } catch (e) {}
+  document.addEventListener('pointerdown', () => { if (ctx && ctx.state === 'suspended' && !(J && J.pausa)) ctx.resume(); });
+  document.addEventListener('keydown', () => { if (ctx && ctx.state === 'suspended' && !(J && J.pausa)) ctx.resume(); });
+
+  // ================= Bucle =================
+  let ultimo = performance.now();
+  setInterval(() => {
+    const ahora = performance.now();
+    const dt = Math.min(.05, (ahora - ultimo) / 1000);
+    ultimo = ahora;
+    actualizar(dt);
+  }, 16);
+
+  // ================= Menús =================
+  $('#bJugar').onclick = () => { iniciarAudio(); modoPractica = false; if (!CUENTA) { abrirCuenta(); return; } mostrar('mapas'); document.querySelector('#mapas button').focus(); };
+  $('#bPractica').onclick = () => { iniciarAudio(); modoPractica = true; mostrar('mapas'); anunciar('Práctica: los zombis son más lentos y no te lastiman. No se guarda en la tabla.'); document.querySelector('#mapas button').focus(); };
+  $('#bCrearCuenta').onclick = crearCuenta;
+  $('#cNombre').addEventListener('keydown', e => { if (e.key === 'Enter') crearCuenta(); });
+  $('#bCancelarCuenta').onclick = () => { $('#cuentaPanel').hidden = true; $('#bJugar').focus(); };
+  mostrarCuentaInfo();
+  $('#bVolverMapas').onclick = () => { mostrar('inicio'); $('#bJugar').focus(); };
+  document.querySelectorAll('[data-mapa]').forEach(b => b.onclick = () => { ultimoMapa = b.dataset.mapa; nuevaPartida(ultimoMapa); });
+  let ayudaDesdePausa = false;
+  const abrirAyuda = desdePausa => { ayudaDesdePausa = desdePausa; iniciarAudio(); $('#ayuda').hidden = false; setTimeout(() => $('#tAyuda').focus(), 50); };
+  $('#bAyuda').onclick = () => abrirAyuda(false);
+  $('#bAyudaPausa').onclick = () => { if (ctx) ctx.resume(); abrirAyuda(true); };
+  $('#bCerrarAyuda').onclick = () => {
+    $('#ayuda').hidden = true;
+    if (ayudaDesdePausa) { if (ctx) ctx.suspend(); $('#tPausa').focus(); } else $('#bAyuda').focus();
+  };
+  $('#bSeguir').onclick = seguir;
+  $('#bSalir').onclick = salirAlMenu;
+  $('#bMenu').onclick = salirAlMenu;
+  $('#bOtra').onclick = () => { $('#fin').hidden = true; nuevaPartida(ultimoMapa); };
+  $('#bTabla').onclick = mostrarTabla;
+  $('#bCerrarTabla').onclick = () => { $('#tabla').hidden = true; $('#bTabla').focus(); };
+  $('#bOpciones').onclick = () => {
+    $('#oVol').value = Math.round(OP.volumen * 100); $('#oAmb').value = Math.round(OP.ambiente * 100);
+    $('#oRadar').checked = OP.radar; $('#oVoz').checked = OP.vozJuego;
+    $('#opciones').hidden = false; setTimeout(() => $('#tOp').focus(), 50);
+  };
+  $('#oVol').oninput = e => { OP.volumen = e.target.value / 100; if (master) master.gain.value = OP.volumen; guardarOp(); };
+  $('#oAmb').oninput = e => { OP.ambiente = e.target.value / 100; if (ambBus) ambBus.gain.value = OP.ambiente * .6; guardarOp(); };
+  $('#oRadar').onchange = e => { OP.radar = e.target.checked; guardarOp(); };
+  $('#oVoz').onchange = e => { OP.vozJuego = e.target.checked; guardarOp(); if (OP.vozJuego) anunciar('Voz del juego prendida.'); };
+  $('#bCerrarOp').onclick = () => { $('#opciones').hidden = true; $('#bOpciones').focus(); };
+  document.addEventListener('keydown', e => {
+    if (e.key !== 'Escape') return;
+    if (!$('#cuentaPanel').hidden) { $('#bCancelarCuenta').click(); e.preventDefault(); }
+    else if (!$('#ayuda').hidden) { $('#bCerrarAyuda').click(); e.preventDefault(); }
+    else if (!$('#tabla').hidden) { $('#bCerrarTabla').click(); e.preventDefault(); }
+    else if (!$('#opciones').hidden) { $('#bCerrarOp').click(); e.preventDefault(); }
+    else if (J && J.pausa && !$('#pausa').hidden) { e.preventDefault(); seguir(); }
+  }, true);
+
+  // Botones para probar sonidos
+  const pruebas = [
+    ['Zombi común', () => sonar(S.zombi.comun)], ['Corredor', () => sonar(S.zombi.corredor)], ['Zombi gordo', () => sonar(S.zombi.tanque)],
+    ['Gritón', () => sonar(S.zombi.griton)], ['Trepador', () => sonar(S.zombi.trepador)], ['Jefe', () => sonar(S.zombi.jefe)],
+    ['En la mira: cabeza', () => sonar(SR('apunta.center1', {}, S.miraCabeza))], ['En la mira: pecho', () => sonar(SR('apunta.body1', {}, S.mira))],
+    ['En la mira: piernas', () => sonar(SR('apunta.graze1', {}, S.miraPiernas))], ['Varios zombis en la mira', () => sonar(SR('apunta.body5', {}, S.mira))],
+    ['Te agarró', () => { sonar(S.agarre); setTimeout(() => sonar(S.agarre), 300); }], ['Zombi muy cerca', () => sonar(S.peligro)],
+    ['Balas en el piso', () => sonar(S.item.balas)], ['Botiquín', () => sonar(S.item.botiquin)], ['Arma de fuego', () => sonar(S.item.arma)],
+    ['Arma blanca', () => sonar(S.item.blanca)], ['Granada en el piso', () => sonar(S.item.granada)],
+    ['Radar: pared', () => sonar(S.radarPared, 1, .7)], ['Radar: árbol', () => sonar(S.radarArbol, 1, .7)], ['Radar: puerta', () => sonar(S.radarPuerta)],
+    ['Pistola', () => sonar(S.pistola)], ['Escopeta', () => sonar(S.escopeta)], ['Ametralladora', () => { for (let i = 0; i < 6; i++) setTimeout(() => sonar(S.ametralladora), i * 110); }],
+    ['Música de la tienda', () => sonar(S.tiendaMusica)], ['Rifle', () => sonar(S.rifle)], ['Explosión', () => sonar(S.explosion)], ['Arma rota', () => sonar(S.rotura)]
+  ];
+  for (const [n, f] of pruebas) {
+    const b = document.createElement('button'); b.textContent = n;
+    b.onclick = () => { iniciarAudio(); f(); };
+    $('#pruebas').appendChild(b);
+  }
+
+  // Para las pruebas internas
+  window.__zombis = { BUF, get J() { return J; }, set J(v) { J = v; }, actualizar, nuevaPartida, crearZombi, empezarRonda, disparar, golpear, accionE, juntar, tirarGranada, S, ARMAS, BLANCAS, ZTIPOS, ZONAS, MAPAS, crearMapa, anunciar, OP, guardarOp, pausar,
+    setCtx(c) { ctx = c; ruidoBuf = crearRuido(c); master = c.destination; } };
+})();
+</script>
+<script src="motor3d.js"></script>
+<script src="graficos.js"></script>
+<script src="tactil.js"></script>
+</body>
+</html>
