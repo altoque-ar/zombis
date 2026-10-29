@@ -6,6 +6,9 @@ on:
   push:
     branches: [main]
   workflow_dispatch:
+  # Cada 3 días se arma sola, así GitHub no tira la llave guardada (la tira si pasa una semana sin usarla)
+  schedule:
+    - cron: '17 9 */3 * *'
 permissions:
   contents: write
 jobs:
