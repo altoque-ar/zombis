@@ -1,0 +1,35 @@
+plugins { id 'com.android.application' }
+
+android {
+    namespace 'ar.altoque.zombis'
+    compileSdk 34
+    defaultConfig {
+        applicationId 'ar.altoque.zombis'
+        minSdk 24
+        targetSdk 34
+        // La versión que ve la gente siempre es 1.0; el número interno sube solo en cada compilación
+        versionCode Integer.parseInt(System.getenv('GITHUB_RUN_NUMBER') ?: '1')
+        versionName '1.0'
+    }
+    signingConfigs {
+        // Misma firma siempre, así las actualizaciones se instalan encima de la anterior
+        // La llave no está en el repositorio: GitHub la guarda aparte y la pasa al compilar
+        zombis {
+            storeFile file(System.getenv('ZOMBIS_LLAVE') ?: '../llave/zombis.keystore')
+            storePassword System.getenv('ZOMBIS_CLAVE') ?: ''
+            keyAlias 'zombis'
+            keyPassword System.getenv('ZOMBIS_CLAVE') ?: ''
+        }
+    }
+    buildTypes {
+        release {
+            minifyEnabled false
+            signingConfig signingConfigs.zombis
+        }
+        debug { signingConfig signingConfigs.zombis }
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
