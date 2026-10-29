@@ -1,0 +1,77 @@
+# Arma la app de Android (Zombis.apk) gratis cada vez que se sube un cambio,
+# y la deja para descargar siempre en el mismo enlace:
+# https://github.com/<usuario>/<repositorio>/releases/download/app/Zombis.apk
+name: App de Android
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+permissions:
+  contents: write
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.7'
+      - name: Armar las carpetas de la app (los archivos están todos juntos en app-android)
+        working-directory: app-android
+        run: |
+          set -e
+          mkdir -p app/src/main/java/ar/altoque/zombis app/src/main/res/values
+          mv build-app.gradle app/build.gradle
+          mv build-raiz.gradle build.gradle
+          mv AndroidManifest.xml app/src/main/
+          mv MainActivity.java app/src/main/java/ar/altoque/zombis/
+          mv styles.xml app/src/main/res/values/
+          for d in mdpi hdpi xhdpi xxhdpi xxxhdpi; do mkdir -p app/src/main/res/mipmap-$d; mv icono-$d.png app/src/main/res/mipmap-$d/ic_launcher.png; done
+      - name: Copiar el juego adentro de la app
+        run: |
+          mkdir -p app-android/app/src/main/assets/juego
+          cp Zombis.html sonidos.js motor3d.js graficos.js tactil.js app-android/app/src/main/assets/juego/
+      # La llave para firmar se guarda en GitHub (no en los archivos públicos).
+      # Si está el secreto ZOMBIS_LLAVE_B64 (con ZOMBIS_CLAVE) se usa ese; si no, se usa la guardada en la caché,
+      # y la primera vez se crea una nueva.
+      - name: Traer la llave guardada
+        uses: actions/cache@v4
+        with:
+          path: llave
+          key: zombis-llave-v1
+      - name: Llave para firmar
+        env:
+          LLAVE_B64: ${{ secrets.ZOMBIS_LLAVE_B64 }}
+          CLAVE: ${{ secrets.ZOMBIS_CLAVE }}
+        run: |
+          set -e
+          mkdir -p llave
+          if [ -n "$LLAVE_B64" ]; then
+            echo "$LLAVE_B64" | base64 -d > llave/zombis.keystore
+            echo "$CLAVE" > llave/clave.txt
+          elif [ ! -f llave/zombis.keystore ]; then
+            openssl rand -hex 16 > llave/clave.txt
+            keytool -genkeypair -keystore llave/zombis.keystore -storetype PKCS12 -storepass "$(cat llave/clave.txt)" -keypass "$(cat llave/clave.txt)" -alias zombis -keyalg RSA -keysize 2048 -validity 20000 -dname "CN=Zombis, O=A Ciegas, C=AR"
+          fi
+          echo "ZOMBIS_LLAVE=$GITHUB_WORKSPACE/llave/zombis.keystore" >> $GITHUB_ENV
+          echo "::add-mask::$(cat llave/clave.txt)"
+          echo "ZOMBIS_CLAVE=$(cat llave/clave.txt)" >> $GITHUB_ENV
+      - name: Armar el APK
+        working-directory: app-android
+        run: gradle assembleRelease --no-daemon
+      - name: Ponerle nombre
+        run: cp app-android/app/build/outputs/apk/release/app-release.apk Zombis.apk
+      - name: Publicar para descargar
+        uses: ncipollo/release-action@v1
+        with:
+          tag: app
+          name: Zombis para Android
+          body: App de Android de Zombis. Bajá Zombis.apk e instalalo.
+          artifacts: Zombis.apk
+          allowUpdates: true
+          replacesArtifacts: true
+          makeLatest: true
