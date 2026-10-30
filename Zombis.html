@@ -140,6 +140,9 @@
         <input id="oAmb" type="range" min="0" max="100" step="5">
       </label>
       <label class="check"><input id="oRadar" type="checkbox"> Radar de paredes, puertas y árboles</label>
+      <label class="campo">Sonidos de ayuda para jugar sin ver (mira, cabeza, pecho y piernas, tic al girar y paredes)
+        <select id="oAyudas"><option value="auto">Automático (en el celular solo con modo sin ver o lector de pantalla)</option><option value="si">Siempre</option><option value="no">Nunca</option></select>
+      </label>
       <label class="check"><input id="oVoz" type="checkbox"> Usar la voz del juego (si no usás lector de pantalla)</label>
       <button id="bCerrarOp" class="principal">Listo</button>
     </div>
@@ -210,8 +213,28 @@
   const fx = (t, d) => { try { if (window.GRAF) window.GRAF.evento(t, d); } catch (e) {} try { window.dispatchEvent(new CustomEvent('zombis', { detail: { t, d } })); } catch (e) {} };
 
   // ================= Opciones =================
-  const OP = { volumen: 0.8, ambiente: 0.5, radar: true, vozJuego: false, nombre: '' };
+  const OP = { volumen: 0.8, ambiente: 0.5, radar: true, vozJuego: false, nombre: '', ayudas: 'auto' };
   try { Object.assign(OP, JSON.parse(localStorage.getItem('zombis-opciones') || '{}')); } catch (e) {}
+  // Sonidos de ayuda para jugar sin ver: mira, cabeza/pecho/piernas, tic al girar y radar de paredes.
+  // Automático: en la compu siempre; en el celular solo con el modo sin ver o con el lector de pantalla prendido.
+  // Así, para los que ven, suena como un juego normal (zombis, armas, pasos y todo lo demás siguen igual).
+  function esCelular() {
+    try { return !!window.ZAndroid || (matchMedia('(pointer: coarse)').matches && !matchMedia('(pointer: fine)').matches); } catch (e) { return false; }
+  }
+  let lectorCache = { t: -1e9, v: false };
+  function lectorActivo() {
+    const ahora = performance.now();
+    if (ahora - lectorCache.t > 2000) {
+      lectorCache.t = ahora;
+      try { lectorCache.v = !!(window.ZAndroid && ZAndroid.lectorActivo && ZAndroid.lectorActivo()); } catch (e) { lectorCache.v = false; }
+    }
+    return lectorCache.v;
+  }
+  function ayudasSonoras() {
+    if (OP.ayudas === 'si') return true;
+    if (OP.ayudas === 'no') return false;
+    return !esCelular() || OP.vozJuego || lectorActivo();
+  }
   function guardarOp() { try { localStorage.setItem('zombis-opciones', JSON.stringify(OP)); } catch (e) {} }
 
   // ================= Voz =================
@@ -244,7 +267,9 @@
   let ctx = null, master = null, ambBus = null, ruidoBuf = null;
   function iniciarAudio() {
     if (ctx) { if (ctx.state === 'suspended') ctx.resume(); return; }
-    ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const AC = window.AudioContext || window.webkitAudioContext;
+    // en celulares con poca memoria los sonidos se guardan más livianos (ocupan un tercio menos)
+    try { ctx = CELU_LENTO ? new AC({ sampleRate: 32000, latencyHint: 'interactive' }) : new AC({ latencyHint: 'interactive' }); } catch (e) { ctx = new AC(); }
     const comp = ctx.createDynamicsCompressor();
     comp.threshold.value = -10; comp.ratio.value = 6;
     master = ctx.createGain(); master.gain.value = OP.volumen;
@@ -421,24 +446,77 @@
   // ================= Sonidos reales =================
   const BUF = {};
   const VAR = {};
+  // Los sonidos se preparan de a pocos (primero los que hacen falta enseguida y después el resto),
+  // así el celular no se traba al abrir. Si un sonido todavía no está listo, se prepara en ese momento.
+  const PEND = {};
+  let NOMBRES = [];
+  const colaCarga = [];
+  let cargando = 0;
+  const esperando = {}, enCurso = {};
+  const CELU_LENTO = (() => {
+    try {
+      const mem = navigator.deviceMemory || (window.ZAndroid && ZAndroid.memoriaMB ? ZAndroid.memoriaMB() / 1024 : 8);
+      return mem <= 3 || (navigator.hardwareConcurrency || 8) <= 4;
+    } catch (e) { return false; }
+  })();
+  const MAX_CARGA = CELU_LENTO ? 3 : 6;
+  function pedirSonido(n, primero) {
+    if (!PEND[n]) return;
+    const i = colaCarga.indexOf(n);
+    if (i >= 0) { if (!primero) return; colaCarga.splice(i, 1); }
+    if (primero) colaCarga.unshift(n); else colaCarga.push(n);
+    seguirCarga();
+  }
+  function seguirCarga() {
+    while (cargando < MAX_CARGA && colaCarga.length) {
+      const n = colaCarga.shift(), b64 = PEND[n];
+      if (!b64) continue;
+      delete PEND[n]; cargando++; enCurso[n] = 1;
+      const listo = () => {
+        cargando--; delete enCurso[n];
+        (esperando[n] || []).forEach(f => f()); delete esperando[n];
+        if (!colaCarga.length && !cargando) { window.SONIDOS_ZOMBIS = null; window.__cargandoSonidos = false; $('#cargando').textContent = ''; }
+        seguirCarga();
+      };
+      try {
+        const bin = atob(b64), u = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);
+        const r = ctx.decodeAudioData(u.buffer, b => { BUF[n] = b; listo(); }, () => listo());
+        if (r && r.catch) r.catch(() => {});
+      } catch (e) { listo(); }
+    }
+  }
+  // Promesa que se cumple cuando esos sonidos están listos (o no se pudieron cargar)
+  function asegurarSonidos(lista) {
+    return Promise.all(lista.map(n => new Promise(res => {
+      if (BUF[n] || (!PEND[n] && !enCurso[n])) return res();
+      (esperando[n] = esperando[n] || []).push(res);
+      pedirSonido(n, true);
+    })));
+  }
   function cargarSonidos() {
     const datos = window.SONIDOS_ZOMBIS;
     if (!datos) return Promise.resolve();
     $('#cargando').textContent = 'Cargando sonidos...';
-    const tareas = Object.entries(datos).map(([n, b64]) => {
-      const bin = atob(b64), u = new Uint8Array(bin.length);
-      for (let i = 0; i < bin.length; i++) u[i] = bin.charCodeAt(i);
-      return ctx.decodeAudioData(u.buffer).then(b => { BUF[n] = b; }).catch(() => {});
+    NOMBRES = Object.keys(datos); window.__cargandoSonidos = true;
+    Object.assign(PEND, datos);
+    // primero lo de los menús, el ambiente, los pasos, la pistola y los zombis comunes; después el resto
+    const prio = [/^menu\./, /^amb\./, /^paso\./, /^pistola\./, /^z\.comun\./, /^apunta\./, /^radar\./, /^get/, /^balas|^botiquin|^items/];
+    const orden = NOMBRES.slice().sort((a, b) => {
+      const pa = prio.findIndex(r => r.test(a)), pb = prio.findIndex(r => r.test(b));
+      return (pa < 0 ? 99 : pa) - (pb < 0 ? 99 : pb);
     });
-    return Promise.all(tareas).then(() => { window.SONIDOS_ZOMBIS = null; $('#cargando').textContent = ''; });
+    for (const n of orden) colaCarga.push(n);
+    seguirCarga();
+    return Promise.resolve();
   }
   function variantes(pre) {
-    if (!VAR[pre]) { const re = new RegExp('^' + pre.replace(/\./g, '\\.') + '\\d+$'); VAR[pre] = Object.keys(BUF).filter(k => re.test(k)); }
+    if (!VAR[pre]) { const re = new RegExp('^' + pre.replace(/\./g, '\\.') + '\\d+$'); VAR[pre] = NOMBRES.filter(k => re.test(k)); }
     return VAR[pre];
   }
   function tocar(dest, t, nombre, { rate = 1, vol = 1, offset = 0, dur } = {}) {
     const b = BUF[nombre];
-    if (!b) return false;
+    if (!b) { if (PEND[nombre]) pedirSonido(nombre, true); return false; }
     const s = ctx.createBufferSource(); s.buffer = b; s.playbackRate.value = rate;
     const g = ctx.createGain(); g.gain.value = vol;
     s.connect(g); g.connect(dest);
@@ -446,8 +524,11 @@
     return true;
   }
   function tocarVar(dest, t, pre, o) {
-    const l = variantes(pre);
-    if (!l.length) return tocar(dest, t, pre, o);
+    const todas = variantes(pre);
+    if (!todas.length) return tocar(dest, t, pre, o);
+    const l = todas.filter(k => BUF[k]);
+    if (l.length < todas.length) todas.forEach(k => pedirSonido(k, true));
+    if (!l.length) return false;
     return tocar(dest, t, elegir(l), o);
   }
   // Devuelve una función de sonido: el real si está, si no el de respaldo
@@ -1679,7 +1760,7 @@
     if (giro) {
       P.ang = normAng(P.ang + giro * 2.6 * dt);
       const oct = Math.round(((P.ang % TAU) + TAU) % TAU / (TAU / 8)) % 8;
-      if (oct !== P.ultimoOctante) { P.ultimoOctante = oct; sonar(oct === 0 ? S.brujulaNorte : S.brujula, 1); }
+      if (oct !== P.ultimoOctante) { P.ultimoOctante = oct; if (ayudasSonoras()) sonar(oct === 0 ? S.brujulaNorte : S.brujula, 1); }
     }
     // caminar
     if (P.construyendo) {
@@ -1896,7 +1977,7 @@
         const cuantos = lista.filter(c => c.okY).length;
         const n = cuantos >= 3 ? 5 : cuantos === 2 ? 4 : rndi(1, 3);
         const tipo = ['center', 'body', 'graze'][P.zona];
-        sonar(SR(`apunta.${tipo}${n}`, { vol: 1.1 }, [S.miraCabeza, S.mira, S.miraPiernas][P.zona]), 1);
+        if (ayudasSonoras()) sonar(SR(`apunta.${tipo}${n}`, { vol: 1.1 }, [S.miraCabeza, S.mira, S.miraPiernas][P.zona]), 1);
       }
       return;
     }
@@ -1905,9 +1986,9 @@
   function cambiarZona(paso) {
     const P = J.jug;
     const n = clamp(P.zona + paso, 0, 2);
-    if (n === P.zona) { sonar(S.nada); anunciar(ZONAS[n].nombre + '.'); return; }
+    if (n === P.zona) { if (ayudasSonoras()) sonar(S.nada); anunciar(ZONAS[n].nombre + '.'); return; }
     P.zona = n; J.lock = null; J.lockT = 0;
-    sonar(S.zona[n], 1);
+    if (ayudasSonoras()) sonar(S.zona[n], 1);
     anunciar(ZONAS[n].nombre + '.');
     actualizarHud();
   }
@@ -1916,15 +1997,16 @@
     const P = J.jug, R = J.radarT;
     R.frente -= dt; R.izq -= dt; R.der -= dt; R.puerta -= dt;
     const tipoSonido = c => c === ARBOL ? S.radarArbol : S.radarPared;
+    const sinParedes = !ayudasSonoras();
     const f = rayo(P.x, P.y, P.ang, 3);
-    if (f && R.frente <= 0) {
+    if (f && R.frente <= 0 && !(sinParedes && f.c !== ARBOL)) {
       const cerca = 1 - f.d / 3;
       R.frente = .25 + f.d * .18;
       sonar3D(P.x + Math.sin(P.ang) * f.d, P.y - Math.cos(P.ang) * f.d, tipoSonido(f.c), { vol: 1, extra: cerca });
     }
     for (const [k, da] of [['izq', -Math.PI / 2], ['der', Math.PI / 2]]) {
       const r = rayo(P.x, P.y, P.ang + da, 1.2);
-      if (r && R[k] <= 0) {
+      if (r && R[k] <= 0 && !(sinParedes && r.c !== ARBOL)) {
         R[k] = .8;
         sonar3D(P.x + Math.sin(P.ang + da) * r.d, P.y - Math.cos(P.ang + da) * r.d, tipoSonido(r.c), { vol: .6, extra: 1 - r.d / 1.2 });
       }
@@ -1959,6 +2041,12 @@
     const id = J.mapa.id;
     const reales = { bosque: [['amb.bosque', 1.2], ['amb.viento', .5]], selva: [['amb.selva', 1.2], ['amb.arroyo', .6]], jungla: [['amb.jungla', 1.6], ['amb.pantano', .5]],
       desierto: [['amb.desierto', 1.3]], casa: [['amb.reloj', .6], ['amb.heladera', .35]] }[id];
+    if (reales && !reales.every(([n]) => BUF[n]) && reales.some(([n]) => PEND[n] || enCurso[n])) {
+      // todavía se están preparando: esperar un momento y arrancar con los reales
+      const j = J;
+      asegurarSonidos(reales.map(([n]) => n)).then(() => { if (J === j && J.fase !== 'fin') iniciarAmbiente(); });
+      return;
+    }
     if (reales && reales.every(([n]) => BUF[n])) { for (const [n, v] of reales) loopBuf(n, v); J.ambReal = true; return; }
     if (id === 'bosque') loopRuido('lowpass', 400, .5, .25, .1, .1);
     if (id === 'selva') { loopRuido('lowpass', 500, .5, .15); loopRuido('bandpass', 4800, 8, .12, 23, .08); }
@@ -2188,12 +2276,13 @@
   $('#bCerrarTabla').onclick = () => { $('#tabla').hidden = true; $('#bTabla').focus(); };
   $('#bOpciones').onclick = () => {
     $('#oVol').value = Math.round(OP.volumen * 100); $('#oAmb').value = Math.round(OP.ambiente * 100);
-    $('#oRadar').checked = OP.radar; $('#oVoz').checked = OP.vozJuego;
+    $('#oRadar').checked = OP.radar; $('#oVoz').checked = OP.vozJuego; $('#oAyudas').value = OP.ayudas || 'auto';
     $('#opciones').hidden = false; setTimeout(() => $('#tOp').focus(), 50);
   };
   $('#oVol').oninput = e => { OP.volumen = e.target.value / 100; if (master) master.gain.value = OP.volumen; guardarOp(); };
   $('#oAmb').oninput = e => { OP.ambiente = e.target.value / 100; if (ambBus) ambBus.gain.value = OP.ambiente * .6; guardarOp(); };
   $('#oRadar').onchange = e => { OP.radar = e.target.checked; guardarOp(); };
+  $('#oAyudas').onchange = e => { OP.ayudas = e.target.value; guardarOp(); };
   $('#oVoz').onchange = e => { OP.vozJuego = e.target.checked; guardarOp(); if (OP.vozJuego) anunciar('Voz del juego prendida.'); };
   $('#bCerrarOp').onclick = () => { $('#opciones').hidden = true; $('#bOpciones').focus(); };
   document.addEventListener('keydown', e => {
@@ -2225,7 +2314,7 @@
   }
 
   // Para las pruebas internas
-  window.__zombis = { BUF, get J() { return J; }, set J(v) { J = v; }, actualizar, nuevaPartida, crearZombi, empezarRonda, disparar, golpear, accionE, juntar, tirarGranada, S, ARMAS, BLANCAS, ZTIPOS, ZONAS, MAPAS, crearMapa, anunciar, OP, guardarOp, pausar,
+  window.__zombis = { BUF, get J() { return J; }, set J(v) { J = v; }, actualizar, nuevaPartida, crearZombi, empezarRonda, disparar, golpear, accionE, juntar, tirarGranada, S, ARMAS, BLANCAS, ZTIPOS, ZONAS, MAPAS, crearMapa, anunciar, OP, guardarOp, pausar, ayudasSonoras,
     setCtx(c) { ctx = c; ruidoBuf = crearRuido(c); master = c.destination; } };
 })();
 </script>

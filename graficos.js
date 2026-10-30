@@ -15,14 +15,32 @@ const ALTO_PARED = 2.9;
 
 // ================= Calidad =================
 const CAL = {
-  alta:  { pr: 2,    sombra: 2048, sombras: true,  luzSombra: true,  pasto: 1,   part: 1,   lamparas: 6 },
-  media: { pr: 1.25, sombra: 1024, sombras: true,  luzSombra: false, pasto: .55, part: .7,  lamparas: 4 },
-  baja:  { pr: .85,  sombra: 0,    sombras: false, luzSombra: false, pasto: .25, part: .45, lamparas: 2 }
+  alta:    { pr: 2,    sombra: 2048, sombras: true,  luzSombra: true,  pasto: 1,   part: 1,   lamparas: 6 },
+  media:   { pr: 1.25, sombra: 1024, sombras: true,  luzSombra: false, pasto: .55, part: .7,  lamparas: 4 },
+  baja:    { pr: .85,  sombra: 0,    sombras: false, luzSombra: false, pasto: .25, part: .45, lamparas: 2 },
+  muybaja: { pr: .6,   sombra: 0,    sombras: false, luzSombra: false, pasto: .1,  part: .3,  lamparas: 1 }
 };
-let modo = 'alta';
-try { modo = localStorage.getItem('zombis-graficos') || 'alta'; } catch (e) {}
-if (!CAL[modo] && modo !== 'apagados') modo = 'alta';
-const Qc = () => CAL[modo] || CAL.baja;
+const NIVELES = ['alta', 'media', 'baja', 'muybaja'];
+// ¿Es un celular? ¿Es un celular con poca memoria o pocos núcleos?
+const ES_CELU = (() => { try { return !!window.ZAndroid || (matchMedia('(pointer: coarse)').matches && !matchMedia('(pointer: fine)').matches); } catch (e) { return false; } })();
+const MEM_GB = (() => { try { return navigator.deviceMemory || (window.ZAndroid && ZAndroid.memoriaMB ? ZAndroid.memoriaMB() / 1024 : 8); } catch (e) { return 8; } })();
+const NUCLEOS = navigator.hardwareConcurrency || 8;
+const CELU_LENTO = ES_CELU && (MEM_GB <= 3 || NUCLEOS <= 4);
+// modo = lo que eligió la persona ('auto' se ajusta solo); nivel = la calidad que se está usando ahora
+let modo = 'auto';
+try { modo = localStorage.getItem('zombis-graficos') || 'auto'; } catch (e) {}
+// Si la app se cerró por falta de memoria, vuelve a abrir más liviana y lo recuerda
+try {
+  const liv = new URLSearchParams(location.search).get('liviano');
+  if (liv === '1') { modo = 'muybaja'; localStorage.setItem('zombis-graficos', modo); }
+  if (liv === '2') { modo = 'apagados'; localStorage.setItem('zombis-graficos', modo); }
+} catch (e) {}
+if (!CAL[modo] && modo !== 'apagados' && modo !== 'auto') modo = 'auto';
+let nivelAuto = !ES_CELU ? 'alta' : (CELU_LENTO ? 'muybaja' : (MEM_GB >= 6 && NUCLEOS >= 8 ? 'media' : 'baja'));
+try { const g = localStorage.getItem('zombis-graficos-auto'); if (g && CAL[g]) nivelAuto = g; } catch (e) {}
+const nivel = () => modo === 'auto' ? nivelAuto : (CAL[modo] ? modo : 'baja');
+const Qc = () => CAL[nivel()];
+let escalaDin = 1; // baja la resolución sola si el juego anda lento
 
 // ================= Renderer =================
 const lienzoVista = document.createElement('canvas');
@@ -36,15 +54,21 @@ document.body.prepend(lienzoVista);
 
 let R;
 try {
-  R = new THREE.WebGLRenderer({ canvas: lienzoVista, antialias: modo !== 'baja', powerPreference: 'high-performance' });
+  R = new THREE.WebGLRenderer({ canvas: lienzoVista, antialias: !ES_CELU && (nivel() === 'alta' || nivel() === 'media'), powerPreference: 'high-performance' });
 } catch (e) { lienzoVista.remove(); velo.remove(); return; }
 R.outputEncoding = THREE.sRGBEncoding;
 R.toneMapping = THREE.ACESFilmicToneMapping;
 R.shadowMap.enabled = true;
-R.shadowMap.type = THREE.PCFSoftShadowMap;
+R.shadowMap.type = nivel() === 'alta' ? THREE.PCFSoftShadowMap : THREE.PCFShadowMap;
 R.autoClear = false;
-const ANISO = Math.min(8, R.capabilities.getMaxAnisotropy());
+const ANISO = Math.min(ES_CELU ? 2 : 8, R.capabilities.getMaxAnisotropy());
 
+// Si el celular se queda sin memoria para los gráficos, se apagan y el juego sigue con sonido
+lienzoVista.addEventListener('webglcontextlost', e => {
+  e.preventDefault();
+  modo = 'apagados';
+  try { localStorage.setItem('zombis-graficos', 'muybaja'); } catch (er) {}
+});
 const escena = new THREE.Scene();
 const cam = new THREE.PerspectiveCamera(72, 1, .05, 220);
 cam.rotation.order = 'YXZ';
@@ -54,7 +78,7 @@ let escalaPuntos = 500;
 
 function redimensionar() {
   const w = innerWidth, h = innerHeight;
-  R.setPixelRatio(Math.min(devicePixelRatio || 1, Qc().pr));
+  R.setPixelRatio(Math.max(.4, Math.min(devicePixelRatio || 1, Qc().pr) * escalaDin));
   R.setSize(w, h, false);
   cam.aspect = vmCam.aspect = w / h;
   cam.updateProjectionMatrix(); vmCam.updateProjectionMatrix();
@@ -303,7 +327,7 @@ function mat(nombre) {
     hueso: () => S({ color: '#d9cfb3', roughness: .6 }),
     roca: () => S({ color: '#7d776d', roughness: .95, flatShading: true }),
     rocaArena: () => S({ color: '#7d5f43', roughness: 1, flatShading: true }),
-    cactus: () => S({ color: '#33492a', roughness: .85, flatShading: true }),
+    cactus: () => S({ color: '#4d6b34', roughness: .8, flatShading: true }),
     estaca: () => S({ color: '#5a4430', roughness: .9, map: tex(T('corteza'), 1, 2) }),
     municion: () => S({ map: tex(T('municion')), roughness: .7 }),
     botiquin: () => S({ map: tex(T('botiquin')), roughness: .6 }),
@@ -511,6 +535,19 @@ const luzCaja = new THREE.PointLight('#ff3a2a', 0, 9, 2); escena.add(luzCaja);
 const lucesLampara = [];
 for (let i = 0; i < 6; i++) { const l = new THREE.PointLight('#ffd49a', 0, 9, 2); escena.add(l); lucesLampara.push(l); }
 escena.fog = new THREE.FogExp2('#000', .03);
+// Cada luz encendida hace más lento cada punto de la pantalla: en calidad baja se sacan las que menos se notan.
+// (Se ponen o sacan solo al cambiar la calidad, nunca en medio del juego, para que no se trabe.)
+let lucesNivel = null;
+function aplicarLuces() {
+  const nv = nivel();
+  if (lucesNivel === nv) return;
+  lucesNivel = nv;
+  const Q = CAL[nv], liviano = nv === 'baja' || nv === 'muybaja';
+  const poner = (l, si) => { if (si && !l.parent) escena.add(l); if (!si && l.parent) escena.remove(l); };
+  poner(luzTienda, !liviano); poner(luzCaja, !liviano); poner(luzExplosion, nv !== 'muybaja');
+  lucesLampara.forEach((l, i) => poner(l, i < Q.lamparas));
+}
+aplicarLuces();
 
 const pmrem = new THREE.PMREMGenerator(R);
 let envActual = null;
@@ -1458,6 +1495,9 @@ const COLA = [];
 window.GRAF = {
   evento(tipo, d) { COLA.push({ tipo, d }); },
   modo: () => modo,
+  nivel: () => nivel(),
+  escala: () => escalaDin,
+  info: () => ({ llamadas: R.info.render.calls, triangulos: R.info.render.triangles, programas: R.info.programs.length, pr: R.getPixelRatio() }),
   _int: () => ({ VM, escena, vmEscena, vmCam, cam, zVis, crearArma, crearBlanca })
 };
 function procesarEventos(J) {
@@ -1667,6 +1707,35 @@ function moverDemo(D, dt) {
   D.jug.ang = D.tiempo * .07;
 }
 
+// ================= Velocidad: se ajusta sola para que no haya lag =================
+// Cada 2 segundos mira cuántas imágenes por segundo salen. Si son pocas, baja la resolución;
+// si ya está al mínimo y la calidad es automática, baja la calidad (y lo recuerda para la próxima vez).
+// Si anda sobrado, vuelve a subir la resolución de a poco.
+const MED = { t0: 0, cuadros: 0, bien: 0 };
+function cambiarNivelAuto(nv) {
+  nivelAuto = nv; escalaDin = 1;
+  try { localStorage.setItem('zombis-graficos-auto', nv); } catch (e) {}
+  // menos pasto y partículas se notan desde el próximo mapa (rearmar el mapa ahora trabaría el juego)
+  aplicarLuces(); redimensionar();
+}
+function medirVelocidad(ahora) {
+  if (!MED.t0) { MED.t0 = ahora; MED.cuadros = 0; return; }
+  MED.cuadros++;
+  const pasado = ahora - MED.t0;
+  if (pasado < 2000) return;
+  const fps = MED.cuadros * 1000 / pasado;
+  MED.t0 = ahora; MED.cuadros = 0;
+  if (pasado > 4000 || document.hidden) return; // estuvo pausado o en otra app: no cuenta
+  if (fps < 40) {
+    MED.bien = 0;
+    if (escalaDin > .62) { escalaDin = Math.max(.6, escalaDin * .85); redimensionar(); }
+    else if (modo === 'auto') { const i = NIVELES.indexOf(nivelAuto); if (i < NIVELES.length - 1) cambiarNivelAuto(NIVELES[i + 1]); }
+  } else if (fps > 56) {
+    MED.bien++;
+    if (MED.bien >= 3 && escalaDin < 1) { escalaDin = Math.min(1, escalaDin + .1); MED.bien = 0; redimensionar(); }
+  } else MED.bien = 0;
+}
+
 // ================= Bucle de dibujo =================
 let ultimo = performance.now(), activo = false;
 function dibujar() {
@@ -1677,6 +1746,14 @@ function dibujar() {
   if (!activo) { activo = true; lienzoVista.style.display = velo.style.display = ''; document.body.classList.add('g3d'); }
   const juego = Z.J;
   const enJuego = !!juego && !document.getElementById('juego').hidden;
+  // En los menús la escena de fondo no necesita ir rápido: se dibuja a 30 imágenes por segundo,
+  // y mientras se preparan los sonidos casi no se dibuja (2 por segundo), así el celular los prepara rápido.
+  if (!enJuego) {
+    const minimo = window.__cargandoSonidos ? 500 : 33;
+    if (ahora - (dibujar.ultimoMenu || 0) < minimo) { ultimo = ahora - dt * 1000; return; }
+    dibujar.ultimoMenu = ahora;
+  }
+  if (enJuego && !(juego && juego.pausa)) medirVelocidad(ahora); else MED.t0 = 0;
   document.body.classList.toggle('jugando', enJuego);
   let J = enJuego ? juego : null;
   if (!J) { if (!demo) demo = crearDemo(); moverDemo(demo, dt); J = demo; }
@@ -1694,7 +1771,7 @@ function dibujar() {
     VM.armaId = undefined; VM.blancaId = undefined;
   }
   if (J.tienda && !tiendaVis) { tiendaVis = construirTienda(J.tienda.x, J.tienda.y); escena.add(tiendaVis); luzTienda.position.set(J.tienda.x + .8, 2.1, J.tienda.y + .45); }
-  luzTienda.visible = !!tiendaVis;
+  if (!tiendaVis) luzTienda.intensity = 0;
   if (tiendaVis) { luzTienda.intensity = 2.6 + Math.sin(J_t * 11) * .2 + Math.random() * .2; tiendaVis.userData.disco.rotation.y += dt * 3; }
   const P = J.jug;
   const ddt = pausado ? 0 : dt;
@@ -1880,13 +1957,13 @@ function armarOpcion() {
   const caja = document.querySelector('#opciones .caja');
   if (!caja || document.getElementById('oGraf')) return;
   const l = document.createElement('label'); l.className = 'campo';
-  l.innerHTML = 'Gráficos (para quien mira la pantalla) <select id="oGraf"><option value="alta">Alta calidad</option><option value="media">Media</option><option value="baja">Baja (computadoras lentas)</option><option value="apagados">Apagados</option></select>';
+  l.innerHTML = 'Gráficos (para quien mira la pantalla) <select id="oGraf"><option value="auto">Automática (se ajusta sola para que no haya lag)</option><option value="alta">Alta calidad</option><option value="media">Media</option><option value="baja">Baja (computadoras y celulares lentos)</option><option value="muybaja">Muy baja (celulares viejos)</option><option value="apagados">Apagados</option></select>';
   const listo = document.getElementById('bCerrarOp');
   caja.insertBefore(l, listo);
   const s = l.querySelector('select'); s.value = modo;
   s.onchange = () => {
     modo = s.value; try { localStorage.setItem('zombis-graficos', modo); } catch (e) {}
-    redimensionar(); mundoDe = null;
+    escalaDin = 1; MED.t0 = 0; aplicarLuces(); redimensionar(); mundoDe = null;
   };
 }
 armarOpcion();
