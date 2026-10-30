@@ -1,6 +1,7 @@
 package ar.altoque.zombis;
 
 import android.app.Activity;
+import android.app.ActivityManager;
 import android.content.Context;
 import android.os.Build;
 import android.os.Bundle;
@@ -9,6 +10,8 @@ import android.os.Vibrator;
 import android.speech.tts.TextToSpeech;
 import android.view.View;
 import android.view.WindowManager;
+import android.view.accessibility.AccessibilityManager;
+import android.webkit.RenderProcessGoneDetail;
 import android.webkit.JavascriptInterface;
 import android.webkit.WebChromeClient;
 import android.webkit.WebSettings;
@@ -23,12 +26,15 @@ import java.util.Locale;
  *  - la voz del sistema (la que el usuario eligió en Android, por ejemplo Eloquence),
  *  - la vibración,
  *  - la pantalla siempre prendida, acostada y completa,
- *  - el botón Atrás pausa en vez de cerrar.
+ *  - el botón Atrás pausa en vez de cerrar,
+ *  - avisa si TalkBack está prendido y cuánta memoria tiene el celular,
+ *  - si el celular se queda sin memoria, vuelve a abrir el juego en modo liviano.
  */
 public class MainActivity extends Activity {
     private WebView web;
     private TextToSpeech voz;
     private boolean vozLista = false;
+    private int caidas = 0;
 
     @Override
     protected void onCreate(Bundle guardado) {
@@ -45,6 +51,12 @@ public class MainActivity extends Activity {
             }
         });
 
+        crearWeb(0);
+    }
+
+    /** liviano: 0 normal, 1 gráficos livianos, 2 sin gráficos (si se cerró dos veces por falta de memoria). */
+    private void crearWeb(int liviano) {
+        if (web != null) { try { web.destroy(); } catch (Exception e) { } }
         web = new WebView(this);
         WebSettings s = web.getSettings();
         s.setJavaScriptEnabled(true);
@@ -55,12 +67,25 @@ public class MainActivity extends Activity {
         s.setAllowFileAccessFromFileURLs(true);
         s.setAllowUniversalAccessFromFileURLs(true);
         s.setTextZoom(100);
-        web.setWebViewClient(new WebViewClient());
+        web.setWebViewClient(new WebViewClient() {
+            // Si el celular se quedó sin memoria y el juego se cerró, se vuelve a abrir en modo liviano
+            @Override
+            @android.annotation.TargetApi(26)
+            public boolean onRenderProcessGone(WebView vista, RenderProcessGoneDetail detalle) {
+                if (vista != web) return true;
+                if (vista.getParent() != null) ((android.view.ViewGroup) vista.getParent()).removeView(vista);
+                vista.destroy();
+                web = null;
+                caidas++;
+                crearWeb(Math.min(caidas, 2));
+                return true;
+            }
+        });
         web.setWebChromeClient(new WebChromeClient());
         web.addJavascriptInterface(new Puente(), "ZAndroid");
         web.setBackgroundColor(0xFF000000);
         setContentView(web);
-        web.loadUrl("file:///android_asset/juego/Zombis.html");
+        web.loadUrl("file:///android_asset/juego/Zombis.html" + (liviano > 0 ? "?liviano=" + liviano : ""));
     }
 
     private void pantallaCompleta() {
@@ -104,17 +129,39 @@ public class MainActivity extends Activity {
 
         @JavascriptInterface
         public boolean esApp() { return true; }
+
+        /** true si TalkBack (u otro lector que explora con el dedo) está prendido. */
+        @JavascriptInterface
+        public boolean lectorActivo() {
+            try {
+                AccessibilityManager am = (AccessibilityManager) getSystemService(Context.ACCESSIBILITY_SERVICE);
+                return am != null && am.isEnabled() && am.isTouchExplorationEnabled();
+            } catch (Exception e) { return false; }
+        }
+
+        /** Memoria total del celular en MB (para elegir los gráficos y sonidos según el celular). */
+        @JavascriptInterface
+        public int memoriaMB() {
+            try {
+                ActivityManager am = (ActivityManager) getSystemService(Context.ACTIVITY_SERVICE);
+                ActivityManager.MemoryInfo mi = new ActivityManager.MemoryInfo();
+                am.getMemoryInfo(mi);
+                if (am.isLowRamDevice()) return 1024;
+                return (int) (mi.totalMem / (1024 * 1024));
+            } catch (Exception e) { return 4096; }
+        }
     }
 
     @Override
     public void onBackPressed() {
         // El juego decide: en la partida pausa, en un menú vuelve atrás
-        web.evaluateJavascript("history.back()", null);
+        if (web != null) web.evaluateJavascript("history.back()", null);
     }
 
     @Override
     protected void onPause() {
         super.onPause();
+        if (web == null) return;
         web.evaluateJavascript("try{var z=window.__zombis;if(z&&z.J&&!z.J.pausa&&z.J.fase!=='fin'&&!document.getElementById('juego').hidden)z.pausar();}catch(e){}", null);
         web.onPause();
         if (vozLista) voz.stop();
@@ -123,14 +170,14 @@ public class MainActivity extends Activity {
     @Override
     protected void onResume() {
         super.onResume();
-        web.onResume();
+        if (web != null) web.onResume();
         pantallaCompleta();
     }
 
     @Override
     protected void onDestroy() {
         if (voz != null) voz.shutdown();
-        web.destroy();
+        if (web != null) web.destroy();
         super.onDestroy();
     }
 }
